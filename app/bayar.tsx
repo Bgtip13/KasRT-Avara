@@ -23,7 +23,7 @@ export default function Bayar() {
   const [catatan, setCatatan] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const k = kas.find((x: any) => x._id === kasId);
-  const pr = useQ(api.transaksi.pratinjau, w && kasId ? { wargaId: w._id, kasId } : undefined);
+  const pr = useQ(api.transaksi.pratinjau, w && kasId ? { wargaId: w._id, kasId } : "skip");
   const saran = useMemo(() => (cari.length < 1 ? [] : (warga ?? []).filter((x: any) => x.aktif && (x.nama + " " + x.noRumah).toLowerCase().includes(cari.toLowerCase())).slice(0, 6)), [cari, warga]);
 
   const hitung = (n: number) => { setBulan(n); if (pr) setJumlah(String(pr.nominal * n)); };

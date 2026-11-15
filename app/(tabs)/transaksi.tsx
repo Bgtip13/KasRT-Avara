@@ -3,10 +3,16 @@ import { Alert, Linking, View, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { useSesi, useQ, useM } from "../../src/session";
 import { api } from "../../convex/_generated/api";
-import { Screen, T, Card, Btn, Chip, Chips, Kosong, Tunggu, AlasanModal, C, jalankan } from "../../src/ui";
+import { Screen, T, Card, Btn, Chip, Chips, Kosong, Tunggu, AlasanModal, Badge, C, jalankan } from "../../src/ui";
 import { rp, tglIndo, isiTemplate, linkWa, TPL_KUITANSI } from "../../src/util";
+import { RiwayatWarga } from "../../src/warga-views";
 
 export default function Transaksi() {
+  const { user } = useSesi();
+  return user?.role === "warga" ? <RiwayatWarga /> : <TransaksiStaf />;
+}
+
+function TransaksiStaf() {
   const { user } = useSesi();
   const r = useRouter();
   const [tab, setTab] = useState<"masuk" | "keluar">("masuk");
@@ -35,7 +41,7 @@ export default function Transaksi() {
   };
 
   return (
-    <Screen>
+    <Screen tab title="Transaksi">
       <View style={{ flexDirection: "row", gap: 8 }}>
         <Chip label="Pembayaran" aktif={tab === "masuk"} onPress={() => setTab("masuk")} />
         <Chip label="Pengeluaran" aktif={tab === "keluar"} onPress={() => setTab("keluar")} />
@@ -52,8 +58,9 @@ export default function Transaksi() {
             <T b c={tab === "masuk" ? C.primary : C.danger}>{tab === "masuk" ? "+" : "−"}{rp(x.jumlah)}</T>
           </View>
           <T size={13} c={C.muted}>{x.kas} · {tglIndo(x.tanggal)}{tab === "masuk" ? ` · No. ${x.warga?.noRumah}` : ""}</T>
-          <T size={12} c={C.muted}>Dicatat {x.petugas}{x.batal ? ` · DIBATALKAN: ${x.alasanBatal}` : ""}</T>
-          {x.fotoUrl && !x.batal && <Image source={{ uri: x.fotoUrl }} style={{ height: 120, borderRadius: 8, marginTop: 6 }} resizeMode="cover" />}
+          <T size={12} c={C.muted}>Dicatat {x.petugas}</T>
+          {x.batal && <Badge tone="danger" label={`Dibatalkan: ${x.alasanBatal}`} />}
+          {x.fotoUrl && !x.batal && <Image source={{ uri: x.fotoUrl }} style={{ height: 120, borderRadius: 14, marginTop: 6 }} resizeMode="cover" />}
         </Card>
       ))}
       <AlasanModal tampil={!!batal} judul="Batalkan catatan ini?" onBatal={() => setBatal(null)}

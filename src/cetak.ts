@@ -2,13 +2,13 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { esc, isiTemplate, rp, tglIndo, namaBulan, TPL_UNDANGAN } from "./util";
 
-const CSS = `body{font-family:Helvetica,Arial,sans-serif;color:#14221D;font-size:13px}
+const CSS = `body{font-family:Helvetica,Arial,sans-serif;color:#0F1B3D;font-size:13px}
 .page{page-break-after:always;padding:36px 28px}.page:last-child{page-break-after:auto}
-.kop{text-align:center;border-bottom:2px solid #0F5C4A;padding-bottom:10px;margin-bottom:22px}
+.kop{text-align:center;border-bottom:2px solid #1D4ED8;padding-bottom:10px;margin-bottom:22px}
 .kop b{font-size:18px}h2{text-align:center;letter-spacing:2px;margin:6px 0 24px}
 .isi{line-height:1.7;font-size:15px;margin:22px 0}.ttd{margin-top:48px;text-align:right}
 table{width:100%;border-collapse:collapse;margin:8px 0 18px}th,td{border:1px solid #bbb;padding:5px 7px;text-align:left}
-th{background:#D5E6DE}td.r,th.r{text-align:right}h3{margin:16px 0 4px}`;
+th{background:#DCE8FF}td.r,th.r{text-align:right}h3{margin:16px 0 4px}`;
 
 const logo = (p: Record<string, string>) => (p.logoUrl ? `<img src="${esc(p.logoUrl)}" style="height:64px;margin-bottom:6px"><br>` : "");
 

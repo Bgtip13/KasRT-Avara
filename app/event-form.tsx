@@ -9,7 +9,7 @@ export default function EventForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const r = useRouter();
   const buat = useM(api.event.buat);
-  const d = useQ(api.event.detail, id ? { eventId: id } : undefined);
+  const d = useQ(api.event.detail, id ? { eventId: id } : "skip");
   const [f, setF] = useState({ judul: "Kumpulan Warga", tanggal: hariIni(), jam: "19.30 WIB", tempat: "", deskripsi: "" });
   const [sibuk, setSibuk] = useState(false);
   useEffect(() => { if (id && d?.event) setF({ judul: d.event.judul, tanggal: d.event.tanggal, jam: d.event.jam ?? "", tempat: d.event.tempat, deskripsi: d.event.deskripsi ?? "" }); }, [id, d]);

@@ -53,6 +53,8 @@ export async function wajibRole(ctx: Ctx, token: string, roles: Role[]) {
   if (!roles.includes(u.role)) throw gagal("Anda tidak punya akses untuk ini");
   return u;
 }
+// Pengurus (admin, petugas, pengawas). Akun warga tidak boleh membaca data seluruh RT.
+export const wajibStaf = (ctx: Ctx, token: string) => wajibRole(ctx, token, ["admin", "petugas", "pengawas"]);
 export async function bolehKas(ctx: Ctx, u: Doc<"users">, kasId: Id<"jenisKas">) {
   const k = await ctx.db.get(kasId);
   if (!k || !k.aktif) throw gagal("Jenis kas tidak ditemukan");

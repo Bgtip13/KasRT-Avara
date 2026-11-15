@@ -1,11 +1,11 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { getUser, wajibRole, ringkasKas, catat, gagal } from "./lib";
+import { wajibRole, wajibStaf, ringkasKas, catat, gagal } from "./lib";
 
 export const daftar = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const u = await getUser(ctx, token);
+    const u = await wajibStaf(ctx, token);
     const semua = (await ctx.db.query("jenisKas").collect()).sort((a, b) => a.urutan - b.urutan);
     const out = [];
     for (const k of semua) {

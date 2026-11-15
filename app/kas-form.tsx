@@ -19,7 +19,7 @@ export default function KasForm() {
   }, [id, kas]);
   const set = (k: string) => (v: any) => setF((x: any) => ({ ...x, [k]: v }));
   const num = (t: string) => t.replace(/[^\d-]/g, "");
-  const petugas = (users ?? []).filter((u: any) => u.aktif && u.role !== "pengawas");
+  const petugas = (users ?? []).filter((u: any) => u.aktif && (u.role === "admin" || u.role === "petugas"));
   const toggle = (uid: string) => set("petugasIds")(f.petugasIds.includes(uid) ? f.petugasIds.filter((x: string) => x !== uid) : [...f.petugasIds, uid]);
 
   return (
@@ -39,7 +39,7 @@ export default function KasForm() {
       <T c={C.muted} size={13}>Petugas penanggung jawab</T>
       <Chips>{petugas.map((u: any) => <Chip key={u._id} label={u.nama} aktif={f.petugasIds.includes(u._id)} onPress={() => toggle(u._id)} />)}</Chips>
       {petugas.length === 0 && <T size={13} c={C.muted}>Belum ada petugas. Undang dulu lewat menu Petugas & pengguna.</T>}
-      {id && <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><T>Kas aktif</T><Switch value={f.aktif} onValueChange={set("aktif")} /></View>}
+      {id && <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><T>Kas aktif</T><Switch trackColor={{ true: C.primary, false: "#CBD5EA" }} thumbColor="#fff" value={f.aktif} onValueChange={set("aktif")} /></View>}
       <Btn label="Simpan" loading={sibuk} onPress={async () => {
         setSibuk(true);
         const ok = await jalankan(() => simpan({ id: id || undefined, nama: f.nama, periode: f.periode, nominal: Number(f.nominal || 0), nominalKontrak: f.nominalKontrak !== "" && f.periode !== "bebas" ? Number(f.nominalKontrak) : undefined, petugasIds: f.petugasIds, aktif: f.aktif, saldoAwal: Number(f.saldoAwal || 0) }).then(() => true));

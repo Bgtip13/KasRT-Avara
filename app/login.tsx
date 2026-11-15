@@ -3,7 +3,8 @@ import { View, Pressable, Text, Alert, Image } from "react-native";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useSesi } from "../src/session";
-import { Screen, T, Btn, Field, C, jalankan } from "../src/ui";
+import { PinDots, PinPad } from "../src/pin";
+import { Screen, T, Btn, Field, Card, Tunggu, C, jalankan } from "../src/ui";
 
 export default function Login() {
   const s = useSesi();
@@ -15,59 +16,53 @@ export default function Login() {
 
   useEffect(() => { if (s.status === "terkunci" && s.bioAktif) s.masukBio().then((e) => e && setErr(e)); }, [s.status]);
 
-  const tekan = async (d: string) => {
-    if (sibuk) return;
-    const baru = (pin + d).slice(0, 6);
-    setPin(baru); setErr("");
-    if (baru.length === 6) {
-      setSibuk(true);
-      const e = await jalankan(() => s.masukPin(baru));
-      if (e) { setErr(e); setPin(""); }
-      setSibuk(false);
-    }
+  const selesai = async (p: string) => {
+    setSibuk(true);
+    const e = await jalankan(() => s.masukPin(p)); // null = berhasil, string = pesan salah, undefined = gagal jaringan
+    if (e !== null) { setPin(""); if (e) setErr(e); }
+    setSibuk(false);
   };
 
-  if (s.status === "memuat") return <Screen><T>Memuat…</T></Screen>;
+  const logo = (ukuran: number) => (
+    <Image source={idt?.logoUrl ? { uri: idt.logoUrl } : require("../assets/images/logo-mark.png")}
+      style={{ width: ukuran, height: ukuran, borderRadius: ukuran * 0.26 }} resizeMode="contain" />
+  );
+
+  if (s.status === "memuat") return <Screen plain><Tunggu /></Screen>;
 
   if (s.status === "keluar")
     return (
-      <Screen edges={["top", "bottom"]}>
-        <View style={{ height: 40 }} />
-        {!!idt?.logoUrl && <Image source={{ uri: idt.logoUrl }} style={{ width: 84, height: 84, borderRadius: 16 }} resizeMode="contain" />}
-        <T size={28} b>{idt?.namaRT || "Kas RT"}</T>
-        {!!idt?.tagline && <T c={C.muted}>{idt.tagline}</T>}
-        <T c={C.muted}>Masukkan nomor HP yang didaftarkan pengurus. Belum punya akun atau lupa PIN? Hubungi pengurus.</T>
-        <Field label="Nomor HP" value={ph} onChangeText={setPh} keyboardType="phone-pad" placeholder="0812xxxxxxxx" />
-        <Btn label="Lanjut" disabled={ph.length < 9} onPress={() => s.pakaiNomor(ph)} />
+      <Screen plain>
+        <View style={{ alignItems: "center", gap: 6, marginTop: 36, marginBottom: 16 }}>
+          {logo(92)}
+          <T size={28} b s={{ marginTop: 10, letterSpacing: -0.5 }}>{idt?.namaRT || "Kas RT"}</T>
+          {!!idt?.tagline && <T c={C.muted}>{idt.tagline}</T>}
+        </View>
+        <Card s={{ gap: 14, padding: 20 }}>
+          <T c={C.muted} s={{ lineHeight: 21 }}>Masukkan nomor HP yang didaftarkan pengurus. Belum punya akun atau lupa PIN? Hubungi pengurus.</T>
+          <Field label="Nomor HP" value={ph} onChangeText={setPh} keyboardType="phone-pad" placeholder="0812xxxxxxxx" />
+          <Btn label="Lanjut" disabled={ph.length < 9} onPress={() => s.pakaiNomor(ph)} />
+        </Card>
       </Screen>
     );
 
-  const tombol = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "bio", "0", "hapus"];
   return (
-    <Screen edges={["top", "bottom"]} scroll={false}>
-      <View style={{ flex: 1, justifyContent: "center", gap: 18 }}>
-        <T size={24} b s={{ textAlign: "center" }}>Masukkan PIN</T>
-        <T c={C.muted} s={{ textAlign: "center" }}>{s.phone}</T>
-        <View style={{ flexDirection: "row", justifyContent: "center", gap: 14 }}>
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <View key={i} style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: C.primary, backgroundColor: i < pin.length ? C.primary : "transparent" }} />
-          ))}
-        </View>
-        <T c={C.danger} s={{ textAlign: "center", minHeight: 20 }}>{err}</T>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14 }}>
-          {tombol.map((k) => {
-            const kosong = k === "bio" && !s.bioAktif;
-            return (
-              <Pressable key={k} disabled={kosong}
-                onPress={() => (k === "hapus" ? setPin(pin.slice(0, -1)) : k === "bio" ? s.masukBio().then((e) => e && setErr(e)) : tekan(k))}
-                style={{ width: 76, height: 62, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: kosong ? "transparent" : C.card, borderWidth: kosong ? 0 : 1, borderColor: C.line }}>
-                <Text style={{ fontSize: k.length > 1 ? 13 : 24, color: C.ink, fontWeight: "600" }}>{k === "bio" ? (kosong ? "" : "Biometrik") : k === "hapus" ? "Hapus" : k}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Btn kind="ghost" label="Bukan akun saya / ganti nomor" onPress={() => Alert.alert("Ganti nomor?", "Aplikasi akan melupakan nomor dan biometrik di HP ini.", [{ text: "Batal" }, { text: "Ganti", onPress: s.lupaAkun }])} />
+    <Screen plain>
+      <View style={{ alignItems: "center", gap: 6, marginTop: 8 }}>
+        {logo(64)}
+        <T size={24} b s={{ marginTop: 10, letterSpacing: -0.4 }}>Masukkan PIN</T>
+        <T c={C.muted}>{s.phone}</T>
       </View>
+      <View style={{ marginVertical: 14, gap: 10 }}>
+        <PinDots panjang={pin.length} error={err} />
+        <T c={C.danger} size={13} s={{ textAlign: "center", minHeight: 18 }}>{err}</T>
+      </View>
+      <PinPad value={pin} onChange={(v) => { setPin(v); setErr(""); }} onComplete={selesai} busy={sibuk}
+        bio={s.bioAktif} onBio={() => s.masukBio().then((e) => e && setErr(e))} />
+      <Pressable onPress={() => Alert.alert("Ganti nomor?", "Aplikasi akan melupakan nomor dan biometrik di HP ini.", [{ text: "Batal" }, { text: "Ganti", onPress: s.lupaAkun }])}
+        style={{ alignSelf: "center", paddingVertical: 14, paddingHorizontal: 12, marginTop: 8 }}>
+        <Text style={{ color: C.primaryDark, fontWeight: "600" }}>Bukan akun saya / ganti nomor</Text>
+      </Pressable>
     </Screen>
   );
 }

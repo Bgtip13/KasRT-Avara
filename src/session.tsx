@@ -5,14 +5,22 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { normWa } from "./util";
 
+export type Role = "admin" | "petugas" | "pengawas" | "warga";
+export const NAMA_ROLE: Record<Role, string> = { admin: "Admin (pemilik aplikasi)", petugas: "Petugas kas", pengawas: "Pengawas (RT)", warga: "Warga" };
+export const staf = (r?: Role) => r === "admin" || r === "petugas" || r === "pengawas";
+
 type Status = "memuat" | "keluar" | "terkunci" | "masuk";
-type Info = { phone?: string; token?: string; nama?: string; role?: "admin" | "petugas" | "pengawas"; wajibGanti?: boolean };
+type Info = { phone?: string; token?: string; nama?: string; role?: Role; wajibGanti?: boolean };
+
+// Sesi juga disimpan di memori proses (bukan di disk). Kalau pohon React di-remount (mis. layar error di-reset),
+// pengguna tidak ditendang ke layar PIN. Hilang sendiri saat aplikasi ditutup, jadi PIN tetap diminta saat dibuka lagi.
+let memori: Info = {};
 
 const K_PHONE = "kas_phone", K_KEY = "kas_devkey", K_BIO = "kas_bio";
 
 type Ctx = {
   status: Status; phone?: string; token?: string; bioAktif: boolean;
-  user?: { nama: string; role: "admin" | "petugas" | "pengawas"; phone?: string; wajibGanti: boolean };
+  user?: { nama: string; role: Role; phone?: string; wajibGanti: boolean };
   pakaiNomor: (phone: string) => Promise<void>;
   masukPin: (pin: string) => Promise<string | null>;
   masukBio: () => Promise<string | null>;
@@ -25,8 +33,9 @@ const SesiCtx = createContext<Ctx>(null as any);
 export const useSesi = () => useContext(SesiCtx);
 
 export function SesiProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<Status>("memuat");
-  const [info, setInfo] = useState<Info>({});
+  const [status, setStatus] = useState<Status>(memori.token ? "masuk" : "memuat");
+  const [info, setInfoState] = useState<Info>(memori);
+  const setInfo = (f: Info | ((x: Info) => Info)) => setInfoState((x) => { const n = typeof f === "function" ? f(x) : f; memori = n; return n; });
   const [bioAktif, setBioAktif] = useState(false);
   const loginPin = useMutation(api.auth.loginPin);
   const loginPerangkat = useMutation(api.auth.loginPerangkat);
@@ -39,8 +48,8 @@ export function SesiProvider({ children }: { children: ReactNode }) {
     (async () => {
       const phone = await SecureStore.getItemAsync(K_PHONE);
       setBioAktif((await SecureStore.getItemAsync(K_BIO)) === "1");
-      setInfo({ phone: phone ?? undefined });
-      setStatus(phone ? "terkunci" : "keluar");
+      setInfo((x) => ({ ...x, phone: phone ?? x.phone }));
+      if (!memori.token) setStatus(phone ? "terkunci" : "keluar");
     })();
   }, []);
 
@@ -53,7 +62,7 @@ export function SesiProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     status, phone: info.phone, token: info.token, bioAktif,
-    user: info.token ? { nama: saya?.nama ?? info.nama ?? "", role: (saya?.role ?? info.role) as any, phone: info.phone, wajibGanti: saya?.wajibGanti ?? info.wajibGanti ?? false } : undefined,
+    user: info.token ? { nama: saya?.nama ?? info.nama ?? "", role: (saya?.role ?? info.role) as Role, phone: info.phone, wajibGanti: saya?.wajibGanti ?? info.wajibGanti ?? false } : undefined,
     pakaiNomor: async (phone) => {
       const p = normWa(phone);
       await SecureStore.setItemAsync(K_PHONE, p);
@@ -105,9 +114,10 @@ export function SesiProvider({ children }: { children: ReactNode }) {
 }
 
 // Helper query/mutation yang otomatis menyertakan token
+// Beri "skip" sebagai args untuk menunda query (mis. menunggu pilihan pengguna). Jangan beri undefined: itu berarti args kosong.
 export function useQ(fn: any, args: any = {}): any {
   const { token } = useSesi();
-  return (useQuery as any)(fn, token ? { token, ...args } : "skip");
+  return (useQuery as any)(fn, token && args !== "skip" ? { token, ...args } : "skip");
 }
 export function useM(fn: any): (args?: any) => Promise<any> {
   const { token } = useSesi();

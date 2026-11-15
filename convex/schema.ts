@@ -1,7 +1,8 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-const role = v.union(v.literal("admin"), v.literal("petugas"), v.literal("pengawas"));
+// admin = pemilik aplikasi, petugas = petugas kas, pengawas = pengurus RT (lihat saja), warga = pengguna umum (hanya lihat akunnya sendiri)
+const role = v.union(v.literal("admin"), v.literal("petugas"), v.literal("pengawas"), v.literal("warga"));
 const periode = v.union(v.literal("bulanan"), v.literal("sekali"), v.literal("bebas"));
 
 export default defineSchema({
@@ -15,7 +16,8 @@ export default defineSchema({
     wajibGanti: v.boolean(), // true = masih PIN awal dari admin, wajib diganti saat masuk
     gagal: v.optional(v.number()),
     terkunciSampai: v.optional(v.number()),
-  }).index("by_phone", ["phone"]),
+    wargaId: v.optional(v.id("warga")), // hanya untuk role "warga": data warga yang terhubung dengan akun ini
+  }).index("by_phone", ["phone"]).index("by_warga", ["wargaId"]),
 
   sessions: defineTable({ userId: v.id("users"), token: v.string(), expiresAt: v.number() })
     .index("by_token", ["token"])
@@ -70,7 +72,8 @@ export default defineSchema({
     alasanBatal: v.optional(v.string()),
   })
     .index("by_kas", ["kasId"])
-    .index("by_tanggal", ["tanggal"]),
+    .index("by_tanggal", ["tanggal"])
+    .index("by_warga", ["wargaId"]),
 
   pengeluaran: defineTable({
     kasId: v.id("jenisKas"),

@@ -115,6 +115,6 @@ export const saya = query({
     if (!s || s.expiresAt < Date.now()) return null;
     const u = await ctx.db.get(s.userId);
     if (!u || !u.aktif) return null;
-    return { id: u._id, nama: u.nama, role: u.role, phone: u.phone, wajibGanti: u.wajibGanti };
+    return { id: u._id, nama: u.nama, role: u.role, phone: u.phone, wajibGanti: u.wajibGanti, wargaId: u.wargaId };
   },
 });

@@ -95,7 +95,7 @@ export default function Blast() {
         <View style={{ flex: 1 }}><Field label="Jeda maks (detik)" value={max} onChangeText={setMax} keyboardType="number-pad" /></View>
       </View>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <T>Buka berikutnya otomatis setelah jeda</T><Switch value={auto} onValueChange={setAuto} />
+        <T>Buka berikutnya otomatis setelah jeda</T><Switch trackColor={{ true: C.primary, false: "#CBD5EA" }} thumbColor="#fff" value={auto} onValueChange={setAuto} />
       </View>
       <T size={12} c={C.muted}>Saran: jeda acak 20–60 detik, maksimal sekitar 30–50 pesan per sesi.</T>
       <View style={{ flexDirection: "row", gap: 8 }}>

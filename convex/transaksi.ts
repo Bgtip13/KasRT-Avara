@@ -1,12 +1,12 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
-import { getUser, wajibRole, bolehKas, catat, gagal, pastikanTagihan, nominalUntuk, bulanIni, bulanBerikut, acak } from "./lib";
+import { wajibStaf, wajibRole, bolehKas, catat, gagal, pastikanTagihan, nominalUntuk, bulanIni, bulanBerikut, acak } from "./lib";
 
 export const pratinjau = query({
   args: { token: v.string(), wargaId: v.id("warga"), kasId: v.id("jenisKas") },
   handler: async (ctx, a) => {
-    await getUser(ctx, a.token);
+    await wajibStaf(ctx, a.token);
     const kas = await ctx.db.get(a.kasId), w = await ctx.db.get(a.wargaId);
     if (!kas || !w) return null;
     const ts = (await ctx.db.query("tagihan").withIndex("by_warga_kas_periode", (q) => q.eq("wargaId", a.wargaId).eq("kasId", a.kasId)).collect())
@@ -75,7 +75,7 @@ export const batalBayar = mutation({
 export const daftarBayar = query({
   args: { token: v.string(), kasId: v.optional(v.id("jenisKas")) },
   handler: async (ctx, a) => {
-    await getUser(ctx, a.token);
+    await wajibStaf(ctx, a.token);
     const kasId = a.kasId;
     const rows = kasId
       ? await ctx.db.query("pembayaran").withIndex("by_kas", (q) => q.eq("kasId", kasId)).order("desc").take(80)
@@ -123,7 +123,7 @@ export const batalKeluar = mutation({
 export const daftarKeluar = query({
   args: { token: v.string(), kasId: v.optional(v.id("jenisKas")) },
   handler: async (ctx, a) => {
-    await getUser(ctx, a.token);
+    await wajibStaf(ctx, a.token);
     const kasId = a.kasId;
     const rows = kasId
       ? await ctx.db.query("pengeluaran").withIndex("by_kas", (q) => q.eq("kasId", kasId)).order("desc").take(80)

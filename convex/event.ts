@@ -1,19 +1,29 @@
 import { mutation, query, internalMutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc } from "./_generated/dataModel";
-import { getUser, wajibRole, catat, gagal, hariIni, bulanIni, buatTagihanBulan, hitungTunggakan } from "./lib";
+import { getUser, wajibStaf, wajibRole, catat, gagal, hariIni, bulanIni, buatTagihanBulan, hitungTunggakan } from "./lib";
 
 const isi = { judul: v.string(), tanggal: v.string(), jam: v.optional(v.string()), tempat: v.string(), deskripsi: v.optional(v.string()) };
 
 export const daftar = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await getUser(ctx, token);
+    await wajibStaf(ctx, token);
     const evs = await ctx.db.query("event").withIndex("by_tanggal").order("desc").take(40);
     return await Promise.all(evs.map(async (e) => {
       const und = await ctx.db.query("antrean").withIndex("by_event", (q) => q.eq("eventId", e._id).eq("jenis", "undangan")).collect();
       return { ...e, undanganTotal: und.length, undanganTerkirim: und.filter((x) => x.status === "terkirim").length };
     }));
+  },
+});
+
+// Daftar acara untuk semua pengguna (termasuk warga): hanya info dasar, tanpa data antrean/penagihan
+export const untukWarga = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await getUser(ctx, token);
+    const evs = await ctx.db.query("event").withIndex("by_tanggal").order("desc").take(30);
+    return evs.map((e) => ({ _id: e._id, judul: e.judul, tanggal: e.tanggal, jam: e.jam, tempat: e.tempat, deskripsi: e.deskripsi }));
   },
 });
 
@@ -36,7 +46,7 @@ export const buat = mutation({
 export const detail = query({
   args: { token: v.string(), eventId: v.id("event") },
   handler: async (ctx, a) => {
-    await getUser(ctx, a.token);
+    await wajibStaf(ctx, a.token);
     const event = await ctx.db.get(a.eventId);
     if (!event) return null;
     const ambil = async (jenis: "undangan" | "tagihan") => {

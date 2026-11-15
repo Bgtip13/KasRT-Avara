@@ -1,11 +1,11 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
-import { getUser, ringkasKas, hitungTunggakan, hariIni, bulanIni } from "./lib";
+import { wajibStaf, ringkasKas, hitungTunggakan, hariIni, bulanIni } from "./lib";
 
 export const dashboard = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await getUser(ctx, token);
+    await wajibStaf(ctx, token);
     const bulan = bulanIni();
     const kasAktif = (await ctx.db.query("jenisKas").collect()).filter((k) => k.aktif).sort((a, b) => a.urutan - b.urutan);
     const wargaAktif = (await ctx.db.query("warga").collect()).filter((w) => w.aktif).length;
@@ -39,7 +39,7 @@ export const dashboard = query({
 export const bulanan = query({
   args: { token: v.string(), bulan: v.string() },
   handler: async (ctx, { token, bulan }) => {
-    await getUser(ctx, token);
+    await wajibStaf(ctx, token);
     const dari = bulan + "-01", sampai = bulan + "-31";
     const kasAktif = (await ctx.db.query("jenisKas").collect()).sort((a, b) => a.urutan - b.urutan);
     const kas = [];
@@ -56,7 +56,7 @@ export const bulanan = query({
 export const tunggakan = query({
   args: { token: v.string(), kasId: v.optional(v.id("jenisKas")) },
   handler: async (ctx, a) => {
-    await getUser(ctx, a.token);
+    await wajibStaf(ctx, a.token);
     return await hitungTunggakan(ctx, bulanIni(), a.kasId);
   },
 });

@@ -23,7 +23,7 @@ export default function WargaForm() {
       <T c={C.muted} size={13}>Status hunian</T>
       <Chips><Chip label="Tetap" aktif={f.statusHunian === "tetap"} onPress={() => set("statusHunian")("tetap")} /><Chip label="Kontrak" aktif={f.statusHunian === "kontrak"} onPress={() => set("statusHunian")("kontrak")} /></Chips>
       <Field label="Catatan (opsional)" value={f.catatan} onChangeText={set("catatan")} />
-      {id && <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><T>Warga aktif</T><Switch value={f.aktif} onValueChange={set("aktif")} /></View>}
+      {id && <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><T>Warga aktif</T><Switch trackColor={{ true: C.primary, false: "#CBD5EA" }} thumbColor="#fff" value={f.aktif} onValueChange={set("aktif")} /></View>}
       <Btn label="Simpan" loading={sibuk} onPress={async () => {
         setSibuk(true);
         const ok = await jalankan(() => simpan({ id: id || undefined, nama: f.nama, noRumah: f.noRumah, noWa: f.noWa, statusHunian: f.statusHunian, blok: f.blok || undefined, catatan: f.catatan || undefined, aktif: f.aktif }).then(() => true));

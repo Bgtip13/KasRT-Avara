@@ -1,13 +1,13 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { getUser, wajibRole, normWa, validWa, gagal, catat } from "./lib";
+import { wajibStaf, wajibRole, normWa, validWa, gagal, catat } from "./lib";
 
 const status = v.union(v.literal("tetap"), v.literal("kontrak"));
 
 export const daftar = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await getUser(ctx, token);
+    await wajibStaf(ctx, token);
     return (await ctx.db.query("warga").collect()).sort((a, b) => a.noRumah.localeCompare(b.noRumah, "id", { numeric: true }));
   },
 });
