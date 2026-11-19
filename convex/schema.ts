@@ -45,6 +45,10 @@ export default defineSchema({
     aktif: v.boolean(),
     urutan: v.number(),
     saldoAwal: v.number(),
+    // QRIS khusus kas ini (gambar di Convex storage). Kosong = kas ini tidak menerima bayar mandiri QRIS.
+    qrisId: v.optional(v.id("_storage")),
+    qrisNama: v.optional(v.string()),
+    qrisCatatan: v.optional(v.string()),
   }),
 
   tagihan: defineTable({
@@ -107,6 +111,21 @@ export default defineSchema({
     rincian: v.optional(v.string()),
     total: v.optional(v.number()),
   }).index("by_event", ["eventId", "jenis"]),
+
+  // Pembayaran mandiri warga lewat QRIS: warga mengirim bukti, petugas memeriksa lalu menyetujui (otomatis jadi pembayaran) atau menolak
+  pengajuan: defineTable({
+    wargaId: v.id("warga"),
+    kasId: v.id("jenisKas"),
+    jumlah: v.number(),
+    tanggal: v.string(),
+    catatan: v.optional(v.string()),
+    buktiId: v.optional(v.id("_storage")),
+    status: v.union(v.literal("menunggu"), v.literal("disetujui"), v.literal("ditolak")),
+    alasanTolak: v.optional(v.string()),
+    diprosesOleh: v.optional(v.id("users")),
+    pembayaranId: v.optional(v.id("pembayaran")),
+    noKuitansi: v.optional(v.string()),
+  }).index("by_status", ["status"]).index("by_warga", ["wargaId"]),
 
   pengaturan: defineTable({ kunci: v.string(), nilai: v.string() }).index("by_kunci", ["kunci"]),
 

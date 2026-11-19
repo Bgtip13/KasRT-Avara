@@ -1,7 +1,7 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
-import { getUser, bulanIni } from "./lib";
+import { getUser, bulanIni, nominalUntuk } from "./lib";
 
 // "Akun saya": ringkasan tagihan & riwayat pembayaran untuk warga yang sedang masuk.
 // Hanya membaca data milik warga yang terhubung dengan akun ini (users.wargaId), tidak pernah data warga lain.
@@ -51,10 +51,20 @@ export const ringkasan = query({
     const tahun = bulan.slice(0, 4);
     const dibayarTahunIni = riwayat.filter((x) => !x.batal && x.tanggal.startsWith(tahun)).reduce((s, x) => s + x.jumlah, 0);
 
+    // Pilihan kas untuk bayar mandiri (QRIS): tarif rumah ini + sisa tunggakan
+    const opsiBayar = await Promise.all([...kasMap.values()].filter((k) => k.aktif).sort((x, y) => x.urutan - y.urutan).map(async (k) => {
+      const belum = (per.get(k._id) ?? []).filter((t) => t.terbayar < t.nominal && (t.periode === "sekali" || t.periode <= bulan));
+      return {
+        kasId: k._id, nama: k.nama, periode: k.periode, nominal: k.periode === "bebas" ? 0 : nominalUntuk(k, w), sisa: belum.reduce((s, t) => s + t.nominal - t.terbayar, 0),
+        // QRIS milik kas ini; null = kas ini belum punya QRIS
+        qrisUrl: k.qrisId ? await ctx.storage.getUrl(k.qrisId) : null, qrisNama: k.qrisNama ?? null, qrisCatatan: k.qrisCatatan ?? null,
+      };
+    }));
+
     return {
       terhubung: true as const,
       warga: { nama: w.nama, noRumah: w.noRumah, blok: w.blok ?? null, statusHunian: w.statusHunian },
-      bulan, totalTunggakan, dibayarTahunIni, kas, riwayat,
+      bulan, totalTunggakan, dibayarTahunIni, kas, riwayat, opsiBayar,
     };
   },
 });

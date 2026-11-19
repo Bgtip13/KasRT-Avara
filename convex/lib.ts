@@ -117,3 +117,74 @@ export async function hitungTunggakan(ctx: Ctx, sampai: string, kasId?: Id<"jeni
     .map((h) => ({ warga: h.warga, total: h.total, rincian: h.baris.join("\n") }))
     .sort((a, b) => b.total - a.total);
 }
+
+// ---------------------------------------------------------------- Alokasi pembayaran
+type Alokasi = { tagihanId: Id<"tagihan">; jumlah: number }[];
+
+// Pembayaran dialokasikan ke tagihan tertua yang belum lunas, lalu ke bulan-bulan berikutnya (bayar di muka)
+export async function alokasikanBayar(ctx: MutationCtx, w: Doc<"warga">, kas: Doc<"jenisKas">, jumlah: number): Promise<Alokasi> {
+  let sisa = jumlah;
+  const alokasi: Alokasi = [];
+  if (kas.periode === "bebas") return alokasi;
+  const ada = (await ctx.db.query("tagihan").withIndex("by_warga_kas_periode", (q) => q.eq("wargaId", w._id).eq("kasId", kas._id)).collect())
+    .sort((x, y) => (x.periode < y.periode ? -1 : 1));
+  let periode = "sekali";
+  if (kas.periode === "bulanan") {
+    const belum = ada.find((t) => t.terbayar < t.nominal);
+    periode = belum ? belum.periode : ada.length ? bulanBerikut(ada[ada.length - 1].periode) : bulanIni();
+  }
+  for (let i = 0; sisa > 0 && i < 60; i++) {
+    const t = await pastikanTagihan(ctx, w, kas, periode);
+    const kurang = t.nominal - t.terbayar;
+    if (kurang > 0) {
+      const bayar = Math.min(kurang, sisa);
+      await ctx.db.patch(t._id, { terbayar: t.terbayar + bayar });
+      alokasi.push({ tagihanId: t._id, jumlah: bayar });
+      sisa -= bayar;
+    }
+    if (kas.periode === "sekali") break;
+    periode = bulanBerikut(periode);
+  }
+  return alokasi;
+}
+
+// Mengembalikan alokasi pembayaran (dipakai saat batal, ubah, hapus)
+export async function batalkanAlokasi(ctx: MutationCtx, alokasi: Alokasi) {
+  for (const al of alokasi) {
+    const t = await ctx.db.get(al.tagihanId);
+    if (t) await ctx.db.patch(t._id, { terbayar: Math.max(0, t.terbayar - al.jumlah) });
+  }
+}
+
+export async function simpanPembayaran(
+  ctx: MutationCtx, u: Doc<"users">, w: Doc<"warga">, kas: Doc<"jenisKas">,
+  a: { jumlah: number; tanggal: string; metode?: string; catatan?: string },
+) {
+  const alokasi = await alokasikanBayar(ctx, w, kas, a.jumlah);
+  const noKuitansi = `KR-${a.tanggal.replace(/-/g, "")}-${acak(2).toUpperCase()}`;
+  const id = await ctx.db.insert("pembayaran", { wargaId: w._id, kasId: kas._id, jumlah: a.jumlah, tanggal: a.tanggal, petugasId: u._id, metode: a.metode, catatan: a.catatan, alokasi, noKuitansi, batal: false });
+  await catat(ctx, u, "Catat pembayaran", `${noKuitansi} ${kas.nama} ${w.nama} Rp${a.jumlah}${a.metode ? ` (${a.metode})` : ""}`);
+  return { id, noKuitansi };
+}
+
+// ---------------------------------------------------------------- Undangan acara
+// Antrean undangan dibuat saat acara dibuat. Warga yang baru ditambah / diaktifkan sesudahnya tidak ikut, sehingga daftar kirim
+// undangan WhatsApp tampak kosong ("data warga tidak ditemukan"). Fungsi ini melengkapi antrean tanpa menggandakan.
+export async function lengkapiUndangan(ctx: MutationCtx, eventId: Id<"event">) {
+  const ada = new Set((await ctx.db.query("antrean").withIndex("by_event", (q) => q.eq("eventId", eventId).eq("jenis", "undangan")).collect()).map((x) => x.wargaId));
+  let n = 0;
+  for (const w of (await ctx.db.query("warga").collect()).filter((w) => w.aktif && !ada.has(w._id))) {
+    await ctx.db.insert("antrean", { jenis: "undangan", eventId, wargaId: w._id, status: "menunggu" });
+    n++;
+  }
+  return n;
+}
+
+// Warga baru / diaktifkan: masukkan ke antrean undangan acara yang belum lewat
+export async function undangWargaKeAcaraMendatang(ctx: MutationCtx, wargaId: Id<"warga">) {
+  const evs = await ctx.db.query("event").withIndex("by_tanggal", (q) => q.gte("tanggal", hariIni())).collect();
+  for (const ev of evs) {
+    const ada = (await ctx.db.query("antrean").withIndex("by_event", (q) => q.eq("eventId", ev._id).eq("jenis", "undangan")).collect()).some((x) => x.wargaId === wargaId);
+    if (!ada) await ctx.db.insert("antrean", { jenis: "undangan", eventId: ev._id, wargaId, status: "menunggu" });
+  }
+}

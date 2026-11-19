@@ -1,10 +1,11 @@
 import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useQ, useSesi } from "./session";
+import { useQ, useM, useSesi } from "./session";
 import { api } from "../convex/_generated/api";
-import { Screen, T, Card, Hero, Badge, Btn, Judul, Kosong, Tunggu, C } from "./ui";
+import { Screen, T, Card, Hero, Badge, Btn, Judul, Kosong, Tunggu, AksiBar, konfirmasi, jalankan, C } from "./ui";
 import { rp, namaBulan, tglIndo, hariIni } from "./util";
+import { cetakBukti } from "./cetak";
 
 function BelumTerhubung() {
   return (
@@ -20,6 +21,7 @@ export function BerandaWarga() {
   const { user } = useSesi();
   const r = useRouter();
   const d = useQ(api.akun.ringkasan);
+  const pg = useQ(api.pengaturan.ambil);
   const judul = `Halo, ${(user?.nama ?? "").split(" ")[0]}`;
   if (!d) return <Screen tab title={judul}><Tunggu /></Screen>;
   if (!d.terhubung) return <Screen tab title={judul}><BelumTerhubung /></Screen>;
@@ -36,6 +38,8 @@ export function BerandaWarga() {
         ) : <T c="#fff" b size={36} s={{ letterSpacing: -0.5 }}>{rp(d.totalTunggakan)}</T>}
         <T c="rgba(255,255,255,0.78)" size={13} s={{ marginTop: 4 }}>{lunas ? "Terima kasih, iuran Anda sudah lunas." : "Hubungi petugas kas untuk melunasi."}</T>
       </Hero>
+
+      {pg?.qrisAktif !== "0" && <Btn icon="qr-code-outline" label="Bayar dengan QRIS" onPress={() => r.push("/bayar-qris" as any)} />}
 
       {d.kas.length > 0 && <Judul>Rincian per kas</Judul>}
       {d.kas.map((k: any) => (
@@ -70,17 +74,36 @@ export function BerandaWarga() {
 // Riwayat pembayaran milik warga sendiri
 export function RiwayatWarga() {
   const d = useQ(api.akun.ringkasan);
+  const pg = useQ(api.pengaturan.ambil);
+  const aju = useQ(api.pengajuan.milikSaya);
+  const batalSaya = useM(api.pengajuan.batalSaya);
+  const proses = (aju ?? []).filter((x: any) => x.status !== "disetujui");
   return (
     <Screen tab title="Riwayat" sub="Pembayaran kas atas nama rumah Anda">
-      {!d ? <Tunggu /> : !d.terhubung ? <BelumTerhubung /> : d.riwayat.length === 0 ? <Kosong teks="Belum ada pembayaran tercatat." /> : d.riwayat.map((x: any) => (
-        <Card key={x._id} s={{ opacity: x.batal ? 0.55 : 1 }}>
+      {proses.length > 0 && <Judul>Konfirmasi pembayaran QRIS</Judul>}
+      {proses.map((x: any) => (
+        <Card key={x._id}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-            <T b s={{ flexShrink: 1 }}>{x.kas}</T>
-            <T b c={x.batal ? C.muted : C.primary}>{x.batal ? "" : "+"}{rp(x.jumlah)}</T>
+            <T b s={{ flexShrink: 1 }}>{x.kas}</T><T b>{rp(x.jumlah)}</T>
           </View>
-          <T size={13} c={C.muted}>{tglIndo(x.tanggal)}{x.metode ? ` · ${x.metode}` : ""}</T>
-          <T size={12} c={C.muted}>{x.noKuitansi} · dicatat {x.petugas}</T>
+          <T size={13} c={C.muted}>{tglIndo(x.tanggal)}</T>
+          <Badge tone={x.status === "menunggu" ? "warn" : "danger"} label={x.status === "menunggu" ? "Menunggu pengecekan petugas" : `Ditolak${x.alasanTolak ? `: ${x.alasanTolak}` : ""}`} />
+          {x.status === "menunggu" && <AksiBar items={[{ label: "Batalkan pengajuan", icon: "close-circle-outline", tone: "danger", onPress: () => konfirmasi("Batalkan pengajuan?", "Bukti yang sudah dikirim ikut dihapus.", "Batalkan", () => jalankan(() => batalSaya({ id: x._id }))) }]} />}
+        </Card>
+      ))}
+      {proses.length > 0 && <Judul>Pembayaran tercatat</Judul>}
+      {!d ? <Tunggu /> : !d.terhubung ? <BelumTerhubung /> : d.riwayat.length === 0 ? <Kosong ikon="receipt-outline" teks="Belum ada pembayaran tercatat." /> : d.riwayat.map((x: any) => (
+        <Card key={x._id}>
+          <View style={{ opacity: x.batal ? 0.55 : 1, gap: 4 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+              <T b s={{ flexShrink: 1 }}>{x.kas}</T>
+              <T b c={x.batal ? C.muted : C.primary}>{x.batal ? "" : "+"}{rp(x.jumlah)}</T>
+            </View>
+            <T size={13} c={C.muted}>{tglIndo(x.tanggal)}{x.metode ? ` · ${x.metode}` : ""}</T>
+            <T size={12} c={C.muted}>{x.noKuitansi} · dicatat {x.petugas}</T>
+          </View>
           {x.batal && <Badge tone="danger" label={`Dibatalkan${x.alasanBatal ? `: ${x.alasanBatal}` : ""}`} />}
+          {!x.batal && d.terhubung && <AksiBar items={[{ label: "Cetak kuitansi", icon: "print-outline", onPress: () => jalankan(() => cetakBukti({ judul: "KUITANSI", nomor: x.noKuitansi, tanggal: tglIndo(x.tanggal), baris: [["Telah terima dari", d.warga.nama], ["Rumah No", d.warga.noRumah], ["Untuk pembayaran", x.kas], ...(x.metode ? [["Metode", x.metode] as [string, string]] : [])], jumlah: x.jumlah, ttd: [["Penyetor", d.warga.nama], ["Petugas kas", x.petugas]] }, pg ?? {})) }]} />}
         </Card>
       ))}
     </Screen>

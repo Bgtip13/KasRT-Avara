@@ -1,14 +1,26 @@
 {
-  "cli": { "version": ">= 12.0.0" },
+  "cli": {
+    "version": ">= 12.0.0"
+  },
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_CONVEX_URL": "https://hallowed-civet-434.convex.cloud" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_CONVEX_URL": "https://hallowed-civet-434.convex.cloud"
+      },
+      "channel": "preview"
     },
     "production": {
-      "android": { "buildType": "app-bundle" },
-      "env": { "EXPO_PUBLIC_CONVEX_URL": "https://hallowed-civet-434.convex.cloud" }
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_CONVEX_URL": "https://hallowed-civet-434.convex.cloud"
+      },
+      "channel": "production"
     }
   }
 }

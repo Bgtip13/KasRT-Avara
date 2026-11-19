@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQ, useM } from "../src/session";
 import { api } from "../convex/_generated/api";
-import { Screen, T, Btn, Field, Tunggu, C, jalankan } from "../src/ui";
+import { Screen, T, Card, Btn, Field, Tunggu, C, jalankan } from "../src/ui";
 import { TPL_UNDANGAN, TPL_TAGIHAN, TPL_KUITANSI } from "../src/util";
-import { Alert, Image, View } from "react-native";
+import { Alert, Image, Switch, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 
 export default function Pengaturan() {
@@ -27,7 +27,12 @@ export default function Pengaturan() {
     setSibukLogo(false);
   };
   const [f, setF] = useState<Record<string, string>>({});
-  useEffect(() => { if (pg) setF({ namaRT: "", alamatRT: "", ketua: "", sebutanKetua: "", bendahara: "", tagline: "", tpl_undangan: TPL_UNDANGAN, tpl_tagihan: TPL_TAGIHAN, tpl_kuitansi: TPL_KUITANSI, ...pg }); }, [pg]);
+  // Isi form sekali saat pengaturan selesai dimuat (disesuaikan saat render, bukan lewat effect)
+  const [terisi, setTerisi] = useState(false);
+  if (pg && !terisi) {
+    setTerisi(true);
+    setF({ namaRT: "", alamatRT: "", ketua: "", sebutanKetua: "", bendahara: "", tagline: "", qrisAktif: "1", qrisNama: "", qrisCatatan: "", tpl_undangan: TPL_UNDANGAN, tpl_tagihan: TPL_TAGIHAN, tpl_kuitansi: TPL_KUITANSI, ...pg });
+  }
   if (!pg) return <Screen><Tunggu /></Screen>;
   const set = (k: string) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   return (
@@ -46,6 +51,16 @@ export default function Pengaturan() {
       <Field label="Sebutan ketua (mis. Ketua RT, Ketua Paguyuban)" value={f.sebutanKetua ?? ""} onChangeText={set("sebutanKetua")} placeholder="Ketua RT" />
       <Field label="Nama ketua" value={f.ketua ?? ""} onChangeText={set("ketua")} />
       <Field label="Nama Bendahara" value={f.bendahara ?? ""} onChangeText={set("bendahara")} />
+      <Card s={{ gap: 10 }}>
+        <T b>Pembayaran mandiri QRIS</T>
+        <T size={12} c={C.muted}>Setiap jenis kas punya QRIS sendiri. Unggah di Lainnya &gt; Jenis kas &gt; Edit. Kas tanpa QRIS tidak muncul di pembayaran mandiri warga. Saklar ini mematikan/menyalakan fitur untuk semua kas.</T>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <T>Warga boleh bayar lewat QRIS</T>
+          <Switch trackColor={{ true: C.primary, false: "#CBD5EA" }} thumbColor="#fff" value={f.qrisAktif !== "0"} onValueChange={(v) => set("qrisAktif")(v ? "1" : "0")} />
+        </View>
+        <Field label="Nama penerima bawaan (dipakai bila kas tidak mengisi sendiri)" value={f.qrisNama ?? ""} onChangeText={set("qrisNama")} placeholder="mis. Kas RT 03 / a.n. Bendahara" />
+        <Field label="Catatan bawaan untuk warga (opsional, bisa ditimpa per kas)" value={f.qrisCatatan ?? ""} onChangeText={set("qrisCatatan")} multiline />
+      </Card>
       <T b>Template undangan</T>
       <T size={12} c={C.muted}>Variabel: {"{nama} {no_rumah} {judul} {tanggal} {jam} {tempat} {rt}"}</T>
       <Field label="" value={f.tpl_undangan ?? ""} onChangeText={set("tpl_undangan")} multiline />

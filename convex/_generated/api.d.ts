@@ -16,6 +16,7 @@ import type * as kas from "../kas.js";
 import type * as laporan from "../laporan.js";
 import type * as lib from "../lib.js";
 import type * as log from "../log.js";
+import type * as pengajuan from "../pengajuan.js";
 import type * as pengaturan from "../pengaturan.js";
 import type * as transaksi from "../transaksi.js";
 import type * as users from "../users.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   laporan: typeof laporan;
   lib: typeof lib;
   log: typeof log;
+  pengajuan: typeof pengajuan;
   pengaturan: typeof pengaturan;
   transaksi: typeof transaksi;
   users: typeof users;

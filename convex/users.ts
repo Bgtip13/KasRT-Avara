@@ -109,3 +109,22 @@ export const resetPin = mutation({
     return { pin };
   },
 });
+
+// Hapus akun. Akun yang pernah mencatat transaksi hanya boleh dinonaktifkan, supaya nama petugas di riwayat tidak hilang.
+export const hapus = mutation({
+  args: { token: v.string(), id: v.id("users") },
+  handler: async (ctx, a) => {
+    const me = await wajibRole(ctx, a.token, ["admin"]);
+    if (a.id === me._id) throw gagal("Anda tidak bisa menghapus akun Anda sendiri");
+    const u = await ctx.db.get(a.id);
+    if (!u) throw gagal("Pengguna tidak ditemukan");
+    const pernah = (await ctx.db.query("pembayaran").collect()).some((x) => x.petugasId === a.id) || (await ctx.db.query("pengeluaran").collect()).some((x) => x.petugasId === a.id);
+    if (pernah) throw gagal("Akun ini pernah mencatat transaksi. Nonaktifkan saja agar riwayat tetap utuh.");
+    for (const k of await ctx.db.query("jenisKas").collect())
+      if (k.petugasIds.includes(a.id)) await ctx.db.patch(k._id, { petugasIds: k.petugasIds.filter((x) => x !== a.id) });
+    for (const s of await ctx.db.query("sessions").withIndex("by_user", (q) => q.eq("userId", a.id)).collect()) await ctx.db.delete(s._id);
+    for (const d of await ctx.db.query("devices").withIndex("by_user", (q) => q.eq("userId", a.id)).collect()) await ctx.db.delete(d._id);
+    await ctx.db.delete(a.id);
+    await catat(ctx, me, "Hapus akun", `${u.nama} (${u.role})`);
+  },
+});

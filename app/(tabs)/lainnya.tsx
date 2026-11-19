@@ -1,8 +1,8 @@
-import { View } from "react-native";
+import { Alert, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Alert } from "react-native";
-import { useSesi, NAMA_ROLE } from "../../src/session";
+import { useSesi, useQ, NAMA_ROLE } from "../../src/session";
+import { api } from "../../convex/_generated/api";
 import { Screen, T, Card, Btn, Avatar, C } from "../../src/ui";
 
 export default function Lainnya() {
@@ -11,13 +11,15 @@ export default function Lainnya() {
   const role = user?.role;
   const admin = role === "admin";
   const warga = role === "warga";
-  const item = (ikon: any, judul: string, ket: string, path: string) => (
+  const menunggu = useQ(api.pengajuan.jumlahMenunggu) ?? 0;
+  const item = (ikon: any, judul: string, ket: string, path: string, badge = 0) => (
     <Card key={path} onPress={() => r.push(path as any)}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
         <View style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: C.primarySoft, alignItems: "center", justifyContent: "center" }}>
           <Ionicons name={ikon} size={22} color={C.primaryDark} />
         </View>
         <View style={{ flex: 1, gap: 2 }}><T b>{judul}</T><T size={13} c={C.muted}>{ket}</T></View>
+        {badge > 0 && <View style={{ backgroundColor: C.danger, borderRadius: 11, minWidth: 22, height: 22, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 }}><T c="#fff" size={12} b>{badge}</T></View>}
         <Ionicons name="chevron-forward" size={18} color={C.muted} />
       </View>
     </Card>
@@ -30,6 +32,8 @@ export default function Lainnya() {
           <View style={{ flex: 1, gap: 2 }}><T b size={17}>{user?.nama}</T><T c={C.muted} size={13}>{role ? NAMA_ROLE[role] : ""} · {user?.phone}</T></View>
         </View>
       </Card>
+      {warga && item("qr-code-outline", "Bayar dengan QRIS", "Bayar iuran sendiri lalu kirim bukti ke petugas", "/bayar-qris")}
+      {!warga && item("qr-code-outline", "Konfirmasi pembayaran QRIS", "Periksa bukti bayar mandiri dari warga", "/konfirmasi", menunggu)}
       {!warga && item("document-text-outline", "Laporan", "Rekap bulanan, tunggakan, ekspor PDF", "/laporan")}
       {admin && item("wallet-outline", "Jenis kas", "Iuran wajib, jimpitan, bolo pecah, kas lain, petugas penanggung jawab", "/kas")}
       {admin && item("people-circle-outline", "Pengguna & peran", "Buat akun petugas, pengawas, dan warga; reset PIN", "/pengguna")}

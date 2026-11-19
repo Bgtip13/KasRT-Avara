@@ -31,7 +31,7 @@ export const simpan = mutation({
   args: { token: v.string(), data: v.record(v.string(), v.string()) },
   handler: async (ctx, { token, data }) => {
     const me = await wajibRole(ctx, token, ["admin"]);
-    const BOLEH = ["namaRT", "alamatRT", "ketua", "sebutanKetua", "bendahara", "tagline", "tpl_undangan", "tpl_tagihan", "tpl_kuitansi"];
+    const BOLEH = ["namaRT", "alamatRT", "ketua", "sebutanKetua", "bendahara", "tagline", "tpl_undangan", "tpl_tagihan", "tpl_kuitansi", "qrisAktif", "qrisNama", "qrisCatatan"];
     for (const [kunci, nilai] of Object.entries(data)) {
       if (!BOLEH.includes(kunci)) continue;
       const ada = await ctx.db.query("pengaturan").withIndex("by_kunci", (q) => q.eq("kunci", kunci)).unique();

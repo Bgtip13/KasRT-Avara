@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Pressable, Text, Alert, Image } from "react-native";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -14,7 +14,13 @@ export default function Login() {
   const [sibuk, setSibuk] = useState(false);
   const [err, setErr] = useState("");
 
-  useEffect(() => { if (s.status === "terkunci" && s.bioAktif) s.masukBio().then((e) => e && setErr(e)); }, [s.status]);
+  // Objek sesi dibuat ulang tiap render; simpan di ref supaya biometrik hanya dipicu saat status berubah
+  const sRef = useRef(s);
+  useEffect(() => { sRef.current = s; });
+  useEffect(() => {
+    const c = sRef.current;
+    if (c.status === "terkunci" && c.bioAktif) c.masukBio().then((e) => e && setErr(e));
+  }, [s.status]);
 
   const selesai = async (p: string) => {
     setSibuk(true);

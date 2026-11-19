@@ -9,7 +9,7 @@ const JARAK = 16;   // jarak antar tombol (tetap, jadi tata letaknya selalu 3 ko
 
 function Titik({ isi, salah }: { isi: boolean; salah: boolean }) {
   const s = useSharedValue(isi ? 1 : 0);
-  useEffect(() => { s.set(isi ? withSpring(1, { damping: 11, stiffness: 220 }) : withTiming(0, { duration: 120 })); }, [isi]);
+  useEffect(() => { s.set(isi ? withSpring(1, { damping: 11, stiffness: 220 }) : withTiming(0, { duration: 120 })); }, [isi, s]);
   const st = useAnimatedStyle(() => ({ transform: [{ scale: 0.55 + s.get() * 0.45 }], opacity: 0.35 + s.get() * 0.65 }));
   const warna = salah ? C.danger : C.primary;
   return <Animated.View style={[{ width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: warna, backgroundColor: isi ? warna : "rgba(255,255,255,0.6)" }, st]} />;
@@ -20,7 +20,7 @@ export function PinDots({ panjang, error }: { panjang: number; error?: string })
   const x = useSharedValue(0);
   useEffect(() => {
     if (error) x.set(withSequence(withTiming(-10, { duration: 55 }), withTiming(10, { duration: 90 }), withTiming(-8, { duration: 90 }), withTiming(8, { duration: 90 }), withTiming(0, { duration: 55 })));
-  }, [error]);
+  }, [error, x]);
   const st = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }));
   return (
     <Animated.View style={[{ flexDirection: "row", justifyContent: "center", gap: 16, paddingVertical: 6 }, st]}>

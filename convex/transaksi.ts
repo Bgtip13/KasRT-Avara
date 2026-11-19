@@ -1,7 +1,8 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "./_generated/dataModel";
-import { wajibStaf, wajibRole, bolehKas, catat, gagal, pastikanTagihan, nominalUntuk, bulanIni, bulanBerikut, acak } from "./lib";
+import { wajibStaf, wajibRole, bolehKas, catat, gagal, nominalUntuk, alokasikanBayar, batalkanAlokasi, simpanPembayaran } from "./lib";
+
+const cekTanggal = (t: string) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) throw gagal("Format tanggal harus YYYY-MM-DD"); };
 
 export const pratinjau = query({
   args: { token: v.string(), wargaId: v.id("warga"), kasId: v.id("jenisKas") },
@@ -15,43 +16,36 @@ export const pratinjau = query({
   },
 });
 
-// Pembayaran dialokasikan ke tagihan tertua yang belum lunas, lalu ke bulan-bulan berikutnya (bayar di muka)
 export const bayar = mutation({
   args: { token: v.string(), wargaId: v.id("warga"), kasId: v.id("jenisKas"), jumlah: v.number(), tanggal: v.string(), metode: v.optional(v.string()), catatan: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const u = await wajibRole(ctx, a.token, ["admin", "petugas"]);
     const kas = await bolehKas(ctx, u, a.kasId);
     if (!(a.jumlah > 0)) throw gagal("Jumlah harus lebih dari 0");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(a.tanggal)) throw gagal("Format tanggal harus YYYY-MM-DD");
+    cekTanggal(a.tanggal);
     const w = await ctx.db.get(a.wargaId);
     if (!w) throw gagal("Warga tidak ditemukan");
-    let sisa = a.jumlah;
-    const alokasi: { tagihanId: Id<"tagihan">; jumlah: number }[] = [];
-    if (kas.periode !== "bebas") {
-      const ada = (await ctx.db.query("tagihan").withIndex("by_warga_kas_periode", (q) => q.eq("wargaId", a.wargaId).eq("kasId", a.kasId)).collect())
-        .sort((x, y) => (x.periode < y.periode ? -1 : 1));
-      let periode = "sekali";
-      if (kas.periode === "bulanan") {
-        const belum = ada.find((t) => t.terbayar < t.nominal);
-        periode = belum ? belum.periode : ada.length ? bulanBerikut(ada[ada.length - 1].periode) : bulanIni();
-      }
-      for (let i = 0; sisa > 0 && i < 60; i++) {
-        const t = await pastikanTagihan(ctx, w, kas, periode);
-        const kurang = t.nominal - t.terbayar;
-        if (kurang > 0) {
-          const bayar = Math.min(kurang, sisa);
-          await ctx.db.patch(t._id, { terbayar: t.terbayar + bayar });
-          alokasi.push({ tagihanId: t._id, jumlah: bayar });
-          sisa -= bayar;
-        }
-        if (kas.periode === "sekali") break;
-        periode = bulanBerikut(periode);
-      }
-    }
-    const noKuitansi = `KR-${a.tanggal.replace(/-/g, "")}-${acak(2).toUpperCase()}`;
-    const id = await ctx.db.insert("pembayaran", { wargaId: a.wargaId, kasId: a.kasId, jumlah: a.jumlah, tanggal: a.tanggal, petugasId: u._id, metode: a.metode, catatan: a.catatan, alokasi, noKuitansi, batal: false });
-    await catat(ctx, u, "Catat pembayaran", `${noKuitansi} ${kas.nama} ${w.nama} Rp${a.jumlah}`);
-    return { id, noKuitansi };
+    return await simpanPembayaran(ctx, u, w, kas, { jumlah: a.jumlah, tanggal: a.tanggal, metode: a.metode, catatan: a.catatan });
+  },
+});
+
+// Ubah pembayaran: alokasi lama dikembalikan, lalu dialokasikan ulang sesuai jumlah baru. Warga & jenis kas tidak bisa diganti (hapus lalu catat ulang).
+export const ubahBayar = mutation({
+  args: { token: v.string(), id: v.id("pembayaran"), jumlah: v.number(), tanggal: v.string(), metode: v.optional(v.string()), catatan: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    const u = await wajibRole(ctx, a.token, ["admin", "petugas"]);
+    const p = await ctx.db.get(a.id);
+    if (!p) throw gagal("Pembayaran tidak ditemukan");
+    if (p.batal) throw gagal("Pembayaran yang sudah dibatalkan tidak bisa diubah");
+    const kas = await bolehKas(ctx, u, p.kasId);
+    if (!(a.jumlah > 0)) throw gagal("Jumlah harus lebih dari 0");
+    cekTanggal(a.tanggal);
+    const w = await ctx.db.get(p.wargaId);
+    if (!w) throw gagal("Warga tidak ditemukan");
+    await batalkanAlokasi(ctx, p.alokasi);
+    const alokasi = await alokasikanBayar(ctx, w, kas, a.jumlah);
+    await ctx.db.patch(p._id, { jumlah: a.jumlah, tanggal: a.tanggal, metode: a.metode, catatan: a.catatan, alokasi });
+    await catat(ctx, u, "Ubah pembayaran", `${p.noKuitansi}: Rp${p.jumlah} → Rp${a.jumlah}`);
   },
 });
 
@@ -63,14 +57,37 @@ export const batalBayar = mutation({
     if (!p || p.batal) throw gagal("Pembayaran tidak ditemukan atau sudah dibatalkan");
     await bolehKas(ctx, u, p.kasId);
     if (!a.alasan.trim()) throw gagal("Alasan pembatalan wajib diisi");
-    for (const al of p.alokasi) {
-      const t = await ctx.db.get(al.tagihanId);
-      if (t) await ctx.db.patch(t._id, { terbayar: Math.max(0, t.terbayar - al.jumlah) });
-    }
+    await batalkanAlokasi(ctx, p.alokasi);
     await ctx.db.patch(p._id, { batal: true, alasanBatal: a.alasan.trim() });
     await catat(ctx, u, "Batalkan pembayaran", `${p.noKuitansi}: ${a.alasan}`);
   },
 });
+
+// Hapus permanen (hanya admin). Untuk koreksi yang tetap ingin meninggalkan jejak, pakai "Batalkan".
+export const hapusBayar = mutation({
+  args: { token: v.string(), id: v.id("pembayaran") },
+  handler: async (ctx, a) => {
+    const u = await wajibRole(ctx, a.token, ["admin"]);
+    const p = await ctx.db.get(a.id);
+    if (!p) throw gagal("Pembayaran tidak ditemukan");
+    if (!p.batal) await batalkanAlokasi(ctx, p.alokasi);
+    for (const x of await ctx.db.query("pengajuan").withIndex("by_warga", (q) => q.eq("wargaId", p.wargaId)).collect())
+      if (x.pembayaranId === p._id) await ctx.db.patch(x._id, { pembayaranId: undefined });
+    await ctx.db.delete(p._id);
+    await catat(ctx, u, "Hapus pembayaran", `${p.noKuitansi} Rp${p.jumlah}`);
+  },
+});
+
+async function perkaya(ctx: any, p: any) {
+  const periode = (await Promise.all((p.alokasi as any[]).map(async (al) => (await ctx.db.get(al.tagihanId))?.periode as string | undefined))).filter(Boolean) as string[];
+  return {
+    ...p,
+    periode,
+    warga: await ctx.db.get(p.wargaId),
+    kas: (await ctx.db.get(p.kasId))?.nama ?? "?",
+    petugas: (await ctx.db.get(p.petugasId))?.nama ?? "?",
+  };
+}
 
 export const daftarBayar = query({
   args: { token: v.string(), kasId: v.optional(v.id("jenisKas")) },
@@ -78,14 +95,18 @@ export const daftarBayar = query({
     await wajibStaf(ctx, a.token);
     const kasId = a.kasId;
     const rows = kasId
-      ? await ctx.db.query("pembayaran").withIndex("by_kas", (q) => q.eq("kasId", kasId)).order("desc").take(80)
-      : await ctx.db.query("pembayaran").order("desc").take(80);
-    return await Promise.all(rows.map(async (p) => ({
-      ...p,
-      warga: await ctx.db.get(p.wargaId),
-      kas: (await ctx.db.get(p.kasId))?.nama ?? "?",
-      petugas: (await ctx.db.get(p.petugasId))?.nama ?? "?",
-    })));
+      ? await ctx.db.query("pembayaran").withIndex("by_kas", (q) => q.eq("kasId", kasId)).order("desc").take(150)
+      : await ctx.db.query("pembayaran").order("desc").take(150);
+    return await Promise.all(rows.map((p) => perkaya(ctx, p)));
+  },
+});
+
+export const ambilBayar = query({
+  args: { token: v.string(), id: v.id("pembayaran") },
+  handler: async (ctx, a) => {
+    await wajibStaf(ctx, a.token);
+    const p = await ctx.db.get(a.id);
+    return p ? await perkaya(ctx, p) : null;
   },
 });
 
@@ -101,9 +122,32 @@ export const catatKeluar = mutation({
     const kas = await bolehKas(ctx, u, a.kasId);
     if (!(a.jumlah > 0)) throw gagal("Jumlah harus lebih dari 0");
     if (!a.keterangan.trim()) throw gagal("Keterangan wajib diisi");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(a.tanggal)) throw gagal("Format tanggal harus YYYY-MM-DD");
+    cekTanggal(a.tanggal);
     await ctx.db.insert("pengeluaran", { kasId: a.kasId, jumlah: a.jumlah, tanggal: a.tanggal, keterangan: a.keterangan.trim(), fotoId: a.fotoId, petugasId: u._id, batal: false });
     await catat(ctx, u, "Catat pengeluaran", `${kas.nama} Rp${a.jumlah}: ${a.keterangan}`);
+  },
+});
+
+// fotoId baru = ganti foto; hapusFoto = buang foto lama tanpa pengganti
+export const ubahKeluar = mutation({
+  args: { token: v.string(), id: v.id("pengeluaran"), kasId: v.id("jenisKas"), jumlah: v.number(), tanggal: v.string(), keterangan: v.string(), fotoId: v.optional(v.id("_storage")), hapusFoto: v.optional(v.boolean()) },
+  handler: async (ctx, a) => {
+    const u = await wajibRole(ctx, a.token, ["admin", "petugas"]);
+    const p = await ctx.db.get(a.id);
+    if (!p) throw gagal("Pengeluaran tidak ditemukan");
+    if (p.batal) throw gagal("Pengeluaran yang sudah dibatalkan tidak bisa diubah");
+    await bolehKas(ctx, u, p.kasId);
+    if (a.kasId !== p.kasId) await bolehKas(ctx, u, a.kasId);
+    if (!(a.jumlah > 0)) throw gagal("Jumlah harus lebih dari 0");
+    if (!a.keterangan.trim()) throw gagal("Keterangan wajib diisi");
+    cekTanggal(a.tanggal);
+    let fotoId = p.fotoId;
+    if (a.fotoId || a.hapusFoto) {
+      if (p.fotoId && p.fotoId !== a.fotoId) { try { await ctx.storage.delete(p.fotoId); } catch {} }
+      fotoId = a.fotoId;
+    }
+    await ctx.db.patch(p._id, { kasId: a.kasId, jumlah: a.jumlah, tanggal: a.tanggal, keterangan: a.keterangan.trim(), fotoId });
+    await catat(ctx, u, "Ubah pengeluaran", `${p.keterangan} Rp${p.jumlah} → ${a.keterangan.trim()} Rp${a.jumlah}`);
   },
 });
 
@@ -120,19 +164,44 @@ export const batalKeluar = mutation({
   },
 });
 
+export const hapusKeluar = mutation({
+  args: { token: v.string(), id: v.id("pengeluaran") },
+  handler: async (ctx, a) => {
+    const u = await wajibRole(ctx, a.token, ["admin"]);
+    const p = await ctx.db.get(a.id);
+    if (!p) throw gagal("Data tidak ditemukan");
+    if (p.fotoId) { try { await ctx.storage.delete(p.fotoId); } catch {} }
+    await ctx.db.delete(p._id);
+    await catat(ctx, u, "Hapus pengeluaran", `${p.keterangan} Rp${p.jumlah}`);
+  },
+});
+
+async function perkayaKeluar(ctx: any, p: any) {
+  return {
+    ...p,
+    kas: (await ctx.db.get(p.kasId))?.nama ?? "?",
+    petugas: (await ctx.db.get(p.petugasId))?.nama ?? "?",
+    fotoUrl: p.fotoId ? await ctx.storage.getUrl(p.fotoId) : null,
+  };
+}
+
 export const daftarKeluar = query({
   args: { token: v.string(), kasId: v.optional(v.id("jenisKas")) },
   handler: async (ctx, a) => {
     await wajibStaf(ctx, a.token);
     const kasId = a.kasId;
     const rows = kasId
-      ? await ctx.db.query("pengeluaran").withIndex("by_kas", (q) => q.eq("kasId", kasId)).order("desc").take(80)
-      : await ctx.db.query("pengeluaran").order("desc").take(80);
-    return await Promise.all(rows.map(async (p) => ({
-      ...p,
-      kas: (await ctx.db.get(p.kasId))?.nama ?? "?",
-      petugas: (await ctx.db.get(p.petugasId))?.nama ?? "?",
-      fotoUrl: p.fotoId ? await ctx.storage.getUrl(p.fotoId) : null,
-    })));
+      ? await ctx.db.query("pengeluaran").withIndex("by_kas", (q) => q.eq("kasId", kasId)).order("desc").take(150)
+      : await ctx.db.query("pengeluaran").order("desc").take(150);
+    return await Promise.all(rows.map((p) => perkayaKeluar(ctx, p)));
+  },
+});
+
+export const ambilKeluar = query({
+  args: { token: v.string(), id: v.id("pengeluaran") },
+  handler: async (ctx, a) => {
+    await wajibStaf(ctx, a.token);
+    const p = await ctx.db.get(a.id);
+    return p ? await perkayaKeluar(ctx, p) : null;
   },
 });

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KasRT Warga</title>
+<style>
+:root{--bg:#F5F8FF;--card:#fff;--ink:#0F1B3D;--muted:#5F6F92;--line:#E1E8F5;--pri:#2563EB;--soft:#E8F0FF;--bad:#DC2626;--ok:#16A34A;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:#0E1424;--card:#172038;--ink:#EAF0FF;--muted:#9AA9CC;--line:#273252;--soft:#1E2B4D}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:16px 14px 90px}
+h1{font-size:20px;margin:6px 0 2px}h2{font-size:16px;margin:0 0 6px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+.m{color:var(--muted);font-size:13px}.b{font-weight:700}.big{font-size:26px;font-weight:800}
+.bad{color:var(--bad)}.ok{color:var(--ok)}
+input,select,textarea{width:100%;padding:12px;margin:6px 0 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+button{width:100%;padding:13px;border:0;border-radius:10px;background:var(--pri);color:#fff;font:inherit;font-weight:700}
+button.g{background:var(--soft);color:var(--pri)}button.s{width:auto;padding:6px 12px;font-size:13px}button:disabled{opacity:.5}
+.row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line)}.row:first-of-type{border-top:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}.chip{width:auto;padding:8px 14px;background:var(--soft);color:var(--pri);border-radius:20px}.chip.on{background:var(--pri);color:#fff}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border-radius:0;background:none;color:var(--muted);padding:14px 4px}nav button.on{color:var(--pri)}
+.msg{background:var(--soft);padding:10px 12px;border-radius:10px;margin:10px 0}
+img.q{width:100%;max-height:340px;object-fit:contain;background:#fff;border-radius:10px}
+</style>
+</head>
+<body>
+<main id="app">Memuat…</main>
+<script>
+// Alamat backend Convex (sama dengan EXPO_PUBLIC_CONVEX_URL di aplikasi)
+const CONVEX = "https://hallowed-civet-434.convex.cloud";
+const $ = document.getElementById("app");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const rp = n => "Rp " + Number(n || 0).toLocaleString("id-ID");
+const S = { token: null, tab: "beranda", d: null, pg: null, mine: [], msg: "", busy: false, ganti: false, kasId: null, jumlah: "", file: null, cat: "" };
+try { S.token = localStorage.getItem("kasrt_t"); } catch (e) {}
+
+async function call(kind, path, args) {
+  const r = await fetch(CONVEX + "/api/" + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path, args, format: "json" }) });
+  const j = await r.json();
+  if (j.status === "success") return j.value;
+  throw new Error(typeof j.errorData === "string" ? j.errorData : "Terjadi kesalahan. Periksa koneksi internet lalu coba lagi.");
+}
+const q = (p, a) => call("query", p, { token: S.token, ...a });
+const m = (p, a) => call("mutation", p, { token: S.token, ...a });
+const val = id => (document.getElementById(id) || {}).value || "";
+
+function keluar(pesan) {
+  try { localStorage.removeItem("kasrt_t"); } catch (e) {}
+  Object.assign(S, { token: null, d: null, ganti: false, msg: pesan || "" });
+  draw();
+}
+async function load() {
+  try {
+    const [d, pg, mine] = await Promise.all([q("akun:ringkasan"), q("pengaturan:ambil"), q("pengajuan:milikSaya")]);
+    Object.assign(S, { d, pg, mine });
+  } catch (e) {
+    if (/ganti pin awal/i.test(e.message)) S.ganti = true;
+    else if (/sesi|tidak aktif/i.test(e.message)) return keluar(e.message);
+    else S.msg = e.message;
+  }
+  draw();
+}
+async function masuk() {
+  S.busy = true; S.msg = ""; draw();
+  try {
+    const r = await call("mutation", "auth:loginPin", { phone: val("hp"), pin: val("pin") });
+    if (!r.ok) S.msg = r.pesan;
+    else if (r.role !== "warga") S.msg = "Halaman ini khusus warga. Petugas dan pengurus silakan memakai aplikasi.";
+    else { S.token = r.token; S.ganti = !!r.wajibGanti; try { localStorage.setItem("kasrt_t", r.token); } catch (e) {} if (!S.ganti) await load(); }
+  } catch (e) { S.msg = e.message; }
+  S.busy = false; draw();
+}
+async function gantiPin() {
+  S.busy = true; S.msg = ""; draw();
+  try { await m("auth:gantiPinAwal", { pinBaru: val("pb") }); S.ganti = false; await load(); } catch (e) { S.msg = e.message; }
+  S.busy = false; draw();
+}
+function kecil(f) { // perkecil foto bukti agar unggahan ringan di HP lemot
+  return new Promise(ok => {
+    const i = new Image();
+    i.onload = () => { const k = Math.min(1, 1000 / Math.max(i.width, i.height)), c = document.createElement("canvas"); c.width = i.width * k; c.height = i.height * k; c.getContext("2d").drawImage(i, 0, 0, c.width, c.height); c.toBlob(b => ok(b || f), "image/jpeg", .7); };
+    i.onerror = () => ok(f); i.src = URL.createObjectURL(f);
+  });
+}
+async function kirim() {
+  if (S.busy) return; S.busy = true; S.msg = ""; draw();
+  try {
+    const b = await kecil(S.file), u = await m("pengajuan:buatUrlBukti");
+    const up = await fetch(u, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: b });
+    if (!up.ok) throw new Error("Unggah bukti gagal. Coba lagi.");
+    const { storageId } = await up.json();
+    await m("pengajuan:buat", { kasId: S.kasId, jumlah: Number(S.jumlah), catatan: S.cat || undefined, buktiId: storageId });
+    Object.assign(S, { file: null, kasId: null, jumlah: "", cat: "", tab: "riwayat" });
+    await load(); S.msg = "Konfirmasi terkirim. Petugas akan memeriksa pembayaran Anda.";
+  } catch (e) { S.msg = e.message; }
+  S.busy = false; draw();
+}
+async function batal(id) {
+  if (!confirm("Batalkan konfirmasi ini?")) return;
+  try { await m("pengajuan:batalSaya", { id }); await load(); } catch (e) { S.msg = e.message; draw(); }
+}
+function pilihKas(id) {
+  const k = S.d.opsiBayar.find(x => x.kasId === id);
+  S.kasId = id; S.jumlah = String(k.sisa > 0 ? k.sisa : k.nominal || ""); draw();
+}
+
+const msgBox = () => S.msg ? `<div class="msg">${esc(S.msg)}</div>` : "";
+function vLogin() {
+  return `<h1>KasRT Warga</h1><div class="m">Masuk dengan nomor WhatsApp dan PIN Anda.</div>${msgBox()}
+  <div class="c"><label class="m">Nomor WhatsApp</label><input id="hp" type="tel" inputmode="tel" autocomplete="username" placeholder="08xxxxxxxxxx">
+  <label class="m">PIN (6 angka)</label><input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
+  <button ${S.busy ? "disabled" : ""} onclick="masuk()">${S.busy ? "Memeriksa…" : "Masuk"}</button></div>`;
+}
+function vGanti() {
+  return `<h1>Buat PIN baru</h1><div class="m">Demi keamanan, ganti PIN awal Anda dengan 6 angka baru.</div>${msgBox()}
+  <div class="c"><input id="pb" type="password" inputmode="numeric" maxlength="6" placeholder="PIN baru (6 angka)">
+  <button ${S.busy ? "disabled" : ""} onclick="gantiPin()">Simpan PIN</button></div>`;
+}
+function vBeranda() {
+  const d = S.d;
+  return `<h1>Halo, ${esc(d.warga.nama)}</h1><div class="m">${esc((S.pg && S.pg.namaRT) || "")} · No. rumah ${esc(d.warga.noRumah)}</div>
+  <div class="c"><div class="m">Total tunggakan</div><div class="big ${d.totalTunggakan > 0 ? "bad" : "ok"}">${rp(d.totalTunggakan)}</div>
+  <div class="m">Dibayar tahun ini: ${rp(d.dibayarTahunIni)}</div></div>
+  <div class="c"><h2>Iuran Anda</h2>${d.kas.length ? d.kas.map(k => `<div class="row"><div><div class="b">${esc(k.nama)}</div><div class="m">${k.sisa > 0 ? k.jumlahTagihan + " tagihan belum dibayar" : k.lunasSampai ? "Lunas sampai " + esc(k.lunasSampai) : "Tidak ada tunggakan"}</div></div><div class="b ${k.sisa > 0 ? "bad" : "ok"}">${k.sisa > 0 ? rp(k.sisa) : "Lunas"}</div></div>`).join("") : '<div class="m">Belum ada tagihan.</div>'}</div>`;
+}
+const ST = { menunggu: "Menunggu diperiksa", disetujui: "Disetujui", ditolak: "Ditolak" };
+function vRiwayat() {
+  const d = S.d;
+  return `<h1>Riwayat</h1>${msgBox()}
+  ${S.mine.length ? `<div class="c"><h2>Konfirmasi QRIS Anda</h2>${S.mine.map(x => `<div class="row"><div><div class="b">${esc(x.kas)} · ${rp(x.jumlah)}</div><div class="m">${esc(x.tanggal)} · ${ST[x.status]}${x.noKuitansi ? " · " + esc(x.noKuitansi) : ""}</div>${x.alasanTolak ? `<div class="bad m">Alasan: ${esc(x.alasanTolak)}</div>` : ""}</div>${x.status === "menunggu" ? `<button class="g s" onclick="batal('${esc(x._id)}')">Batalkan</button>` : ""}</div>`).join("")}</div>` : ""}
+  <div class="c"><h2>Pembayaran tercatat</h2>${d.riwayat.length ? d.riwayat.map(x => `<div class="row"><div><div class="b">${esc(x.kas)}${x.batal ? " (dibatalkan)" : ""}</div><div class="m">${esc(x.tanggal)} · ${esc(x.metode || "Tunai")} · ${esc(x.noKuitansi)}</div></div><div class="b">${rp(x.jumlah)}</div></div>`).join("") : '<div class="m">Belum ada pembayaran.</div>'}</div>`;
+}
+function vBayar() {
+  const d = S.d, pg = S.pg || {};
+  if (pg.qrisAktif === "0") return `<h1>Bayar</h1><div class="c m">Pembayaran mandiri lewat QRIS sedang dinonaktifkan. Silakan bayar ke petugas kas.</div>`;
+  const opsi = d.opsiBayar.filter(x => x.qrisUrl);
+  if (!opsi.length) return `<h1>Bayar</h1><div class="c m">Belum ada iuran yang menyediakan QRIS. Silakan bayar ke petugas kas.</div>`;
+  const k = opsi.find(x => x.kasId === S.kasId), n = Number(S.jumlah);
+  return `<h1>Bayar dengan QRIS</h1>${msgBox()}
+  <div class="c"><h2>1. Pilih iuran</h2><div class="chips">${opsi.map(x => `<button class="chip ${x.kasId === S.kasId ? "on" : ""}" onclick="pilihKas('${esc(x.kasId)}')">${esc(x.nama)}</button>`).join("")}</div>
+  ${k ? `<div class="m">${k.sisa > 0 ? "Tunggakan Anda: " + rp(k.sisa) : "Tidak ada tunggakan. Anda bisa bayar di muka."}${k.nominal > 0 ? " Tarif " + rp(k.nominal) + (k.periode === "bulanan" ? " per bulan" : "") + "." : ""}</div>` : ""}</div>
+  ${k ? `<div class="c"><h2>2. Nominal</h2><input id="jml" inputmode="numeric" value="${esc(S.jumlah)}" onchange="S.jumlah=this.value.replace(/\\D/g,'');draw()"></div>` : ""}
+  ${k && n > 0 ? `<div class="c"><h2>3. Bayar ${rp(n)}</h2><img class="q" src="${esc(k.qrisUrl)}" alt="QRIS ${esc(k.nama)}">
+  ${(k.qrisNama || pg.qrisNama) ? `<div class="b">${esc(k.qrisNama || pg.qrisNama)}</div>` : ""}
+  <div class="m">Pindai QRIS dengan m-banking/e-wallet (atau tahan gambar lalu simpan dan pilih dari galeri). Masukkan nominal persis ${rp(n)}.</div>
+  ${(k.qrisCatatan || pg.qrisCatatan) ? `<div class="m">${esc(k.qrisCatatan || pg.qrisCatatan)}</div>` : ""}</div>
+  <div class="c"><h2>4. Kirim bukti</h2><input id="bkt" type="file" accept="image/*" onchange="S.file=this.files[0]||null;S.cat=val('cat');draw()">
+  <input id="cat" placeholder="Catatan (opsional)" value="${esc(S.cat)}" onchange="S.cat=this.value">
+  <button ${S.busy || !S.file ? "disabled" : ""} onclick="S.cat=val('cat');kirim()">${S.busy ? "Mengirim…" : "Kirim konfirmasi"}</button>
+  <div class="m" style="margin-top:6px">Pembayaran baru tercatat setelah petugas memeriksa dan menyetujui.</div></div>` : ""}`;
+}
+function draw() {
+  if (!S.token) { $.innerHTML = vLogin(); return; }
+  if (S.ganti) { $.innerHTML = vGanti(); return; }
+  if (!S.d) { $.innerHTML = msgBox() + '<div class="c m">Memuat data…</div>'; return; }
+  if (!S.d.terhubung) { $.innerHTML = '<h1>Akun belum terhubung</h1><div class="c m">Akun Anda belum terhubung dengan data rumah. Hubungi pengurus RT.</div><button class="g" onclick="keluar()">Keluar</button>'; return; }
+  const v = { beranda: vBeranda, riwayat: vRiwayat, bayar: vBayar }[S.tab]();
+  const tab = (id, t) => `<button class="${S.tab === id ? "on" : ""}" onclick="S.tab='${id}';S.msg='';draw()">${t}</button>`;
+  $.innerHTML = v + `<div style="display:flex;gap:8px"><button class="g" onclick="load()">Segarkan</button><button class="g" onclick="keluar()">Keluar</button></div><nav>${tab("beranda", "Beranda")}${tab("riwayat", "Riwayat")}${tab("bayar", "Bayar")}</nav>`;
+}
+draw();
+if (S.token) load();
+</script>
+</body>
+</html>

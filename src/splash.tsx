@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Image, StyleSheet, View, useWindowDimensions } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
@@ -17,7 +17,7 @@ const NAMA = "KasRT";
 
 function Huruf({ ch, delay }: { ch: string; delay: number }) {
   const p = useSharedValue(0);
-  useEffect(() => { p.set(withDelay(delay, withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) }))); }, []);
+  useEffect(() => { p.set(withDelay(delay, withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) }))); }, [delay, p]);
   const st = useAnimatedStyle(() => ({ opacity: p.get(), transform: [{ translateY: (1 - p.get()) * 18 }] }));
   return <Animated.Text style={[{ fontSize: 34, fontWeight: "800", color: C.ink, letterSpacing: -0.5 }, st]}>{ch}</Animated.Text>;
 }
@@ -25,7 +25,9 @@ function Huruf({ ch, delay }: { ch: string; delay: number }) {
 export function AnimatedSplash({ ready, onDone }: { ready: boolean; onDone: () => void }) {
   const { width: W, height: H } = useWindowDimensions();
   const [minSelesai, setMinSelesai] = useState(false);
-  const [pergi, setPergi] = useState(false);
+  const sudahPergi = useRef(false);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; });
 
   const aurora = useSharedValue(0);   // 0 -> 1: aurora muncul
   const napas = useSharedValue(0);    // 0 <-> 1: aurora bernapas
@@ -50,16 +52,16 @@ export function AnimatedSplash({ ready, onDone }: { ready: boolean; onDone: () =
     bar.set(withDelay(900, withRepeat(withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.cubic) }), -1, false)));
     const t = setTimeout(() => setMinSelesai(true), MIN_MS);
     return () => clearTimeout(t);
-  }, []);
+  }, [aurora, napas, skala, naik, cincin1, cincin2, kilau, sub, bar]);
 
   // Selesai bila animasi sudah cukup lama DAN sesi sudah dimuat
   useEffect(() => {
-    if (!minSelesai || !ready || pergi) return;
-    setPergi(true);
+    if (!minSelesai || !ready || sudahPergi.current) return;
+    sudahPergi.current = true;
     keluar.set(withTiming(1, { duration: EXIT_MS, easing: Easing.inOut(Easing.cubic) }));
-    const t = setTimeout(onDone, EXIT_MS + 60);
+    const t = setTimeout(() => onDoneRef.current(), EXIT_MS + 60);
     return () => clearTimeout(t);
-  }, [minSelesai, ready]);
+  }, [minSelesai, ready, keluar]);
 
   const root = useAnimatedStyle(() => ({ opacity: 1 - keluar.get(), transform: [{ scale: 1 + keluar.get() * 0.06 }] }));
   const aur = (dx: number, dy: number) => { "worklet"; return { opacity: aurora.get(), transform: [{ translateX: dx * (napas.get() - 0.5) }, { translateY: dy * (napas.get() - 0.5) }, { scale: 0.85 + aurora.get() * 0.15 + napas.get() * 0.06 }] }; };

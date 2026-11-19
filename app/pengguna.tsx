@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Alert, Linking, Share, View } from "react-native";
 import { useQ, useM, NAMA_ROLE, Role } from "../src/session";
 import { api } from "../convex/_generated/api";
-import { Screen, T, Card, Btn, Field, Chip, Chips, Judul, Badge, Avatar, Tunggu, C, jalankan, pesanError } from "../src/ui";
+import { Screen, T, Card, Btn, Field, Chip, Chips, Judul, Badge, Avatar, Tunggu, SearchBar, PilihList, AksiBar, IsianModal, Kosong, konfirmasi, C, jalankan, pesanError } from "../src/ui";
 import { linkWa } from "../src/util";
 
 const SEMUA: Role[] = ["admin", "petugas", "pengawas", "warga"];
@@ -16,6 +16,8 @@ export default function Pengguna() {
   const ubah = useM(api.users.ubah);
   const reset = useM(api.users.resetPin);
   const massal = useM(api.users.buatMassalWarga);
+  const hapus = useM(api.users.hapus);
+  const [cariUser, setCariUser] = useState(""); const [editNama, setEditNama] = useState<any>(null);
 
   const [nama, setNama] = useState(""); const [phone, setPhone] = useState(""); const [role, setRole] = useState<Role>("petugas"); const [pin, setPin] = useState("");
   const [cari, setCari] = useState(""); const [pilih, setPilih] = useState<any>(null);
@@ -61,7 +63,8 @@ export default function Pengguna() {
     } }],
   );
 
-  const tampil = (us ?? []).filter((u: any) => saring === "semua" || (saring === "warga" ? u.role === "warga" : u.role !== "warga"));
+  const qu = cariUser.trim().toLowerCase();
+  const tampil = (us ?? []).filter((u: any) => (saring === "semua" || (saring === "warga" ? u.role === "warga" : u.role !== "warga")) && (!qu || [u.nama, u.phone, u.noRumah ?? ""].join(" ").toLowerCase().includes(qu)));
 
   return (
     <Screen>
@@ -80,9 +83,8 @@ export default function Pengguna() {
             <Btn kind="ghost" label="Ganti" onPress={() => { setPilih(null); setNama(""); setPhone(""); }} s={{ paddingVertical: 8 }} />
           </View>
         ) : (<>
-          <Field label="Hubungkan dengan data warga (nama / nomor rumah)" value={cari} onChangeText={setCari} />
-          {saran.map((w: any) => <Card key={w._id} onPress={() => pilihWarga(w)} s={{ padding: 12 }}><T b>{w.nama}</T><T size={13} c={C.muted}>No. {w.noRumah}</T></Card>)}
-          {cari.length > 0 && saran.length === 0 && <T size={13} c={C.muted}>Tidak ada warga yang cocok, atau warga itu sudah punya akun.</T>}
+          <SearchBar value={cari} onChangeText={setCari} placeholder="Cari warga (nama / nomor rumah)" />
+          {cari.length > 0 && <PilihList items={saran.map((w: any) => ({ key: w._id, judul: w.nama, sub: `No. ${w.noRumah}` }))} onPick={(key) => pilihWarga(saran.find((w: any) => w._id === key))} kosong="Tidak ada warga yang cocok, atau warga itu sudah punya akun." />}
         </>))}
         <Field label="Nama" value={nama} onChangeText={setNama} />
         <Field label="Nomor WhatsApp" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
@@ -117,12 +119,13 @@ export default function Pengguna() {
       )}
 
       <Judul>Daftar pengguna</Judul>
+      <SearchBar value={cariUser} onChangeText={setCariUser} placeholder="Cari nama, nomor, atau rumah" />
       <Chips>
         <Chip label="Semua" aktif={saring === "semua"} onPress={() => setSaring("semua")} />
         <Chip label="Pengurus" aktif={saring === "pengurus"} onPress={() => setSaring("pengurus")} />
         <Chip label="Warga" aktif={saring === "warga"} onPress={() => setSaring("warga")} />
       </Chips>
-      {!us ? <Tunggu /> : tampil.map((u: any) => {
+      {!us ? <Tunggu /> : tampil.length === 0 ? <Kosong ikon="people-outline" teks="Tidak ada pengguna yang cocok." /> : tampil.map((u: any) => {
         const isWarga = u.role === "warga";
         return (
           <Card key={u._id} s={{ opacity: u.aktif ? 1 : 0.55, gap: 8 }}>
@@ -139,10 +142,16 @@ export default function Pengguna() {
               <Btn kind="ghost" label="Reset PIN" onPress={() => Alert.alert("Reset PIN?", `${u.nama} akan keluar dari semua perangkat dan mendapat PIN awal baru yang wajib diganti.`, [{ text: "Batal" }, { text: "Reset", onPress: async () => { const r = await jalankan(() => reset({ id: u._id })); if (r) tampilPin("PIN direset", u.nama, u.phone, r.pin, isWarga); } }])} s={{ flex: 1, paddingVertical: 10 }} />
               <Btn kind="ghost" label={u.aktif ? "Nonaktifkan" : "Aktifkan"} onPress={() => jalankan(() => ubah({ id: u._id, nama: u.nama, role: u.role, aktif: !u.aktif }))} s={{ flex: 1, paddingVertical: 10 }} />
             </View>
+            <AksiBar items={[
+              { label: "Ubah nama", icon: "create-outline", onPress: () => setEditNama(u) },
+              { label: "Hapus", icon: "trash-outline", tone: "danger", onPress: () => konfirmasi(`Hapus akun ${u.nama}?`, "Akun dan perangkat loginnya dihapus. Akun yang pernah mencatat transaksi tidak bisa dihapus (nonaktifkan saja).", "Hapus", () => jalankan(() => hapus({ id: u._id }))) },
+            ]} />
             {!isWarga && <Chips>{PENGURUS.filter((k) => k !== u.role).map((k) => <Chip key={k} label={`→ ${NAMA_ROLE[k].split(" (")[0]}`} onPress={() => jalankan(() => ubah({ id: u._id, nama: u.nama, role: k, aktif: u.aktif }))} />)}</Chips>}
           </Card>
         );
       })}
+      <IsianModal tampil={!!editNama} judul="Ubah nama pengguna" label="Nama" awal={editNama?.nama ?? ""} onBatal={() => setEditNama(null)}
+        onOk={(n) => { const u = editNama; setEditNama(null); jalankan(() => ubah({ id: u._id, nama: n, role: u.role, aktif: u.aktif })); }} />
     </Screen>
   );
 }

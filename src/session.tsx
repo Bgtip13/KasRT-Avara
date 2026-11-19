@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import * as LocalAuth from "expo-local-authentication";
 import { useMutation, useQuery } from "convex/react";
@@ -53,10 +53,8 @@ export function SesiProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  // Sesi dicabut/kedaluwarsa di server -> kunci lagi
-  useEffect(() => {
-    if (status === "masuk" && saya === null) { setInfo((x) => ({ phone: x.phone })); setStatus("terkunci"); }
-  }, [saya, status]);
+  // Sesi dicabut/kedaluwarsa di server -> kunci lagi (disesuaikan saat render, bukan lewat effect)
+  if (status === "masuk" && saya === null) { setInfo((x) => ({ phone: x.phone })); setStatus("terkunci"); }
 
   const sukses = (r: any) => { setInfo((x) => ({ ...x, token: r.token, nama: r.nama, role: r.role, wajibGanti: r.wajibGanti })); setStatus("masuk"); };
 
@@ -122,5 +120,5 @@ export function useQ(fn: any, args: any = {}): any {
 export function useM(fn: any): (args?: any) => Promise<any> {
   const { token } = useSesi();
   const m = useMutation(fn) as any;
-  return (args: any = {}) => m({ token, ...args });
+  return useCallback((args: any = {}) => m({ token, ...args }), [m, token]);
 }

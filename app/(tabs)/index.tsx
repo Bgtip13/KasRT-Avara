@@ -15,6 +15,7 @@ function BerandaStaf() {
   const { user } = useSesi();
   const r = useRouter();
   const d = useQ(api.laporan.dashboard);
+  const menunggu = useQ(api.pengajuan.jumlahMenunggu) ?? 0;
   const judul = `Halo, ${(user?.nama ?? "").split(" ")[0]}`;
   if (!d) return <Screen tab title={judul}><Tunggu /></Screen>;
   const bisaCatat = user?.role === "admin" || user?.role === "petugas";
@@ -31,6 +32,12 @@ function BerandaStaf() {
           <Btn label="Catat bayar" onPress={() => r.push("/bayar")} s={{ flex: 1 }} />
           <Btn kind="ghost" label="Catat pengeluaran" onPress={() => r.push("/pengeluaran-form")} s={{ flex: 1 }} />
         </View>
+      )}
+      {menunggu > 0 && (
+        <Card onPress={() => r.push("/konfirmasi")} s={{ backgroundColor: "#FEF3C7", borderColor: "#FCD34D" }}>
+          <T b c="#92400E">{menunggu} pembayaran QRIS menunggu konfirmasi</T>
+          <T size={13} c="#92400E">Ketuk untuk memeriksa bukti bayar warga.</T>
+        </Card>
       )}
       {d.kas.length > 0 && <Judul>Per jenis kas</Judul>}
       {d.kas.map((k: any) => (

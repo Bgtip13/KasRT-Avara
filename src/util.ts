@@ -54,3 +54,31 @@ export function parseBaris(rows: any[]): Baris[] {
     return { nama: o.nama || "", noRumah: o.noRumah || "", noWa, statusHunian: /kontrak|sewa/i.test(o.statusHunian || "") ? "kontrak" : "tetap", blok: o.blok || undefined, catatan: o.catatan || undefined, masalah };
   });
 }
+
+export const bulanPendek = (b: string) => `${BULAN[+b.slice(5, 7) - 1].slice(0, 3)} ${b.slice(0, 4)}`;
+// "Nov 2026" atau "Nov 2026 s.d. Jan 2027 (3 bln)"
+export function periodeTeks(list: string[] | undefined) {
+  const u = [...new Set((list ?? []).filter((p) => /^\d{4}-\d{2}$/.test(p)))].sort();
+  if (u.length === 0) return "";
+  if (u.length === 1) return bulanPendek(u[0]);
+  return `${bulanPendek(u[0])} s.d. ${bulanPendek(u[u.length - 1])} (${u.length} bln)`;
+}
+
+const SATUAN = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
+function tb(n: number): string {
+  if (n < 12) return SATUAN[n];
+  if (n < 20) return tb(n - 10) + " belas";
+  if (n < 100) return tb(Math.floor(n / 10)) + " puluh" + (n % 10 ? " " + tb(n % 10) : "");
+  if (n < 200) return "seratus" + (n > 100 ? " " + tb(n - 100) : "");
+  if (n < 1000) return tb(Math.floor(n / 100)) + " ratus" + (n % 100 ? " " + tb(n % 100) : "");
+  if (n < 2000) return "seribu" + (n > 1000 ? " " + tb(n - 1000) : "");
+  if (n < 1e6) return tb(Math.floor(n / 1000)) + " ribu" + (n % 1000 ? " " + tb(n % 1000) : "");
+  if (n < 1e9) return tb(Math.floor(n / 1e6)) + " juta" + (n % 1e6 ? " " + tb(n % 1e6) : "");
+  if (n < 1e12) return tb(Math.floor(n / 1e9)) + " miliar" + (n % 1e9 ? " " + tb(n % 1e9) : "");
+  return String(n);
+}
+export function terbilang(n: number) {
+  const x = Math.floor(Math.abs(n || 0));
+  const t = x === 0 ? "nol" : tb(x);
+  return t.charAt(0).toUpperCase() + t.slice(1) + " rupiah";
+}

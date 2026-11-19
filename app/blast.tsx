@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Linking, Pressable, Switch, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useQ, useM } from "../src/session";
 import { api } from "../convex/_generated/api";
-import { Screen, T, Card, Btn, Field, C, Tunggu, jalankan } from "../src/ui";
+import { Ionicons } from "@expo/vector-icons";
+import { Screen, T, Card, Btn, Field, SearchBar, Kosong, C, Tunggu, jalankan } from "../src/ui";
 import { isiTemplate, linkWa, acakRentang, tglIndo, rp, TPL_UNDANGAN, TPL_TAGIHAN } from "../src/util";
 
 // Kirim WA lewat tautan wa.me (gratis, tanpa API). Tombol "Kirim" di WhatsApp tetap ditekan manual;
@@ -13,6 +14,8 @@ export default function Blast() {
   const d = useQ(api.event.detail, { eventId });
   const pg = useQ(api.pengaturan.ambil);
   const tandai = useM(api.event.tandai);
+  const sinkron = useM(api.event.sinkronUndangan);
+  const [cari, setCari] = useState("");
   const [pilih, setPilih] = useState<Record<string, boolean>>({});
   const [jalan, setJalan] = useState(false);
   const [antre, setAntre] = useState<any[]>([]);
@@ -21,12 +24,19 @@ export default function Blast() {
   const [min, setMin] = useState("20"); const [max, setMax] = useState("45");
   const [auto, setAuto] = useState(true);
   const [sisa, setSisa] = useState(0);
-  const diinit = useRef(false);
+  const dikenal = useRef<Set<string>>(new Set());
 
-  const daftar: any[] = d ? (jenis === "tagihan" ? d.tagihan : d.undangan) : [];
+  const daftar: any[] = useMemo(() => (d ? (jenis === "tagihan" ? d.tagihan : d.undangan) : []), [d, jenis]);
+  // Perbaikan "data warga tidak ditemukan": lengkapi antrean undangan untuk warga yang ditambah setelah acara dibuat
+  useEffect(() => { if (jenis !== "tagihan" && eventId) sinkron({ eventId }).catch(() => {}); }, [eventId, jenis, sinkron]);
+  // Penerima yang belum terkirim otomatis terpilih, termasuk yang baru muncul setelah sinkron
   useEffect(() => {
-    if (d && !diinit.current) { diinit.current = true; setPilih(Object.fromEntries(daftar.filter((x) => x.status === "menunggu").map((x) => [x._id, true]))); }
-  }, [d]);
+    if (!d) return;
+    const baru = daftar.filter((x) => !dikenal.current.has(x._id));
+    if (baru.length === 0) return;
+    baru.forEach((x) => dikenal.current.add(x._id));
+    setPilih((p) => ({ ...p, ...Object.fromEntries(baru.filter((x) => x.status === "menunggu").map((x) => [x._id, true])) }));
+  }, [d, daftar]);
 
   const pesan = (a: any) => {
     const e = d!.event;
@@ -45,29 +55,40 @@ export default function Blast() {
     setI(n); setSisa(acakRentang(Number(min) || 0, Number(max) || 0)); setFase("jeda");
   };
 
+  // Simpan versi terbaru fungsi/antrean di ref agar efek di bawah tidak perlu berlangganan ulang setiap render
+  const terbaru = useRef({ buka, lanjut, antre });
+  useEffect(() => { terbaru.current = { buka, lanjut, antre }; });
+
   // Setelah kembali dari WhatsApp, tanyakan apakah pesan benar terkirim
   useEffect(() => {
     if (!jalan || fase !== "dibuka") return;
     const sub = AppState.addEventListener("change", (s) => {
       if (s !== "active") return;
-      Alert.alert(`Sudah terkirim ke ${antre[i].warga.nama}?`, undefined, [
-        { text: "Belum / lewati", onPress: () => lanjut(false) },
-        { text: "Sudah", onPress: () => lanjut(true) },
+      const { antre: a, lanjut: lj } = terbaru.current;
+      Alert.alert(`Sudah terkirim ke ${a[i].warga.nama}?`, undefined, [
+        { text: "Belum / lewati", onPress: () => lj(false) },
+        { text: "Sudah", onPress: () => lj(true) },
       ]);
     });
     return () => sub.remove();
   }, [jalan, fase, i]);
 
-  // Hitung mundur jeda, lalu buka WhatsApp berikutnya (atau tunggu tombol)
+  // Hitung mundur jeda, lalu buka WhatsApp berikutnya (atau tunggu tombol).
+  // State diubah di dalam callback timer (bukan langsung di badan efek).
   useEffect(() => {
     if (!jalan || fase !== "jeda") return;
-    if (sisa <= 0) { if (auto) buka(); else setFase("siap"); return; }
-    const t = setTimeout(() => setSisa((x) => x - 1), 1000);
+    const t = setTimeout(() => {
+      if (sisa > 0) setSisa((x) => x - 1);
+      else if (auto) terbaru.current.buka();
+      else setFase("siap");
+    }, sisa > 0 ? 1000 : 0);
     return () => clearTimeout(t);
-  }, [jalan, fase, sisa]);
+  }, [jalan, fase, sisa, auto]);
 
   if (!d || !pg) return <Screen><Tunggu /></Screen>;
   const dipilih = daftar.filter((x) => pilih[x._id]);
+  const q = cari.trim().toLowerCase();
+  const tampil = daftar.filter((x) => !q || (x.warga.nama + " " + x.warga.noRumah).toLowerCase().includes(q));
 
   if (jalan)
     return (
@@ -103,11 +124,13 @@ export default function Blast() {
         <Btn kind="ghost" label="Belum terkirim" onPress={() => setPilih(Object.fromEntries(daftar.filter((x) => x.status === "menunggu").map((x) => [x._id, true])))} s={{ flex: 1 }} />
         <Btn kind="ghost" label="Kosongkan" onPress={() => setPilih({})} s={{ flex: 1 }} />
       </View>
-      {daftar.map((x) => (
+      <SearchBar value={cari} onChangeText={setCari} placeholder="Cari nama atau nomor rumah" />
+      {daftar.length === 0 && <Kosong ikon="people-outline" teks={jenis === "tagihan" ? "Tidak ada warga dengan tagihan." : "Belum ada warga aktif yang bisa diundang. Tambah atau aktifkan warga di tab Warga."} />}
+      {tampil.map((x) => (
         <Pressable key={x._id} onPress={() => setPilih((p) => ({ ...p, [x._id]: !p[x._id] }))}>
-          <Card s={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: pilih[x._id] ? C.primarySoft : C.card }}>
-            <T b>{pilih[x._id] ? "☑" : "☐"}</T>
-            <View style={{ flex: 1 }}><T b>{x.warga.nama}</T><T size={12} c={C.muted}>No. {x.warga.noRumah}{jenis === "tagihan" ? ` · ${rp(x.total ?? 0)}` : ""}</T></View>
+          <Card s={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: pilih[x._id] ? C.primarySoft : C.card }}>
+            <Ionicons name={pilih[x._id] ? "checkbox" : "square-outline"} size={22} color={pilih[x._id] ? C.primary : C.muted} />
+            <View style={{ flex: 1 }}><T b>{x.warga.nama}</T><T size={12} c={C.muted}>No. {x.warga.noRumah}{jenis === "tagihan" ? ` · ${rp(x.total ?? 0)}` : ""} · WA {x.warga.noWa}</T></View>
             {x.status === "terkirim" && <T size={12} c={C.primary}>✓ terkirim</T>}
           </Card>
         </Pressable>

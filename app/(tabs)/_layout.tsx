@@ -1,11 +1,14 @@
-import { Platform } from "react-native";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSesi } from "../../src/session";
 import { C } from "../../src/ui";
 
-const ikon = (aktif: any, mati: any) => ({ color, size, focused }: any) => <Ionicons name={focused ? aktif : mati} size={size} color={color} />;
+const ikon = (aktif: any, mati: any) => {
+  const IkonTab = ({ color, size, focused }: any) => <Ionicons name={focused ? aktif : mati} size={size} color={color} />;
+  IkonTab.displayName = "IkonTab";
+  return IkonTab;
+};
 
 export default function TabsLayout() {
   const ins = useSafeAreaInsets();
@@ -16,12 +19,10 @@ export default function TabsLayout() {
       headerShown: false,
       tabBarActiveTintColor: C.primary, tabBarInactiveTintColor: "#8793B2",
       tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
-      // Tab bar kaca melayang
+      // Tab bar menempel di bawah layar
       tabBarStyle: {
-        position: "absolute", left: 16, right: 16, bottom: ins.bottom + 10, height: 66, borderRadius: 26,
-        backgroundColor: "rgba(255,255,255,0.9)", borderTopWidth: 0, borderWidth: 1, borderColor: "rgba(255,255,255,0.95)",
-        paddingTop: 8, paddingBottom: 8,
-        ...(Platform.OS === "ios" ? { shadowColor: "#1E3A8A", shadowOpacity: 0.16, shadowRadius: 22, shadowOffset: { width: 0, height: 10 } } : { elevation: 8 }),
+        backgroundColor: "#FFFFFF", borderTopWidth: 1, borderTopColor: C.line,
+        height: 58 + ins.bottom, paddingTop: 6, paddingBottom: ins.bottom > 0 ? ins.bottom - 2 : 8,
       },
     }}>
       <Tabs.Screen name="index" options={{ title: "Beranda", tabBarIcon: ikon("home", "home-outline") }} />

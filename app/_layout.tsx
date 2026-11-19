@@ -1,5 +1,5 @@
 import { Component, ReactNode, useEffect, useState } from "react";
-import { Platform, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { StatusBar } from "expo-status-bar";
@@ -18,6 +18,7 @@ function Gagal({ error, retry }: { error: Error; retry: () => void }) {
     <View style={{ flex: 1, justifyContent: "center", padding: 28, gap: 14, backgroundColor: C.bg }}>
       <Text style={{ fontSize: 22, fontWeight: "800", color: C.ink }}>Ada yang tidak beres</Text>
       <Text style={{ color: C.muted, lineHeight: 21 }}>{pesanError(error)} Anda tidak perlu masuk lagi, cukup coba muat ulang layar ini.</Text>
+      <Text selectable style={{ color: C.muted, fontSize: 12 }}>Rincian teknis: {String(error?.message ?? error).slice(0, 400)}</Text>
       <Btn label="Muat ulang" onPress={retry} />
     </View>
   );
@@ -50,14 +51,14 @@ function Guard() {
     if (s.status !== "masuk") { if (!diLogin) r.replace("/login"); return; }
     if (s.user?.wajibGanti) { if (!diPinBaru) r.replace("/pin-baru"); return; }
     if (diLogin || diPinBaru) r.replace("/");
-  }, [s.status, s.user?.wajibGanti, seg]);
+  }, [s.status, s.user?.wajibGanti, seg, r]);
 
   const judul = (title: string) => ({ title });
   return (
     <Stack screenOptions={{
-      headerTransparent: true, headerShadowVisible: false, headerTintColor: C.ink,
+      headerShadowVisible: false, headerTintColor: C.ink,
       headerTitleStyle: { fontWeight: "700" },
-      ...(Platform.OS === "ios" ? { headerBlurEffect: "light" as const } : {}),
+      headerStyle: { backgroundColor: C.bg },
       contentStyle: { backgroundColor: C.bg },
     }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -71,6 +72,8 @@ function Guard() {
       <Stack.Screen name="kas-form" options={judul("Pengaturan kas")} />
       <Stack.Screen name="event-form" options={judul("Acara")} />
       <Stack.Screen name="event/[id]" options={judul("Detail acara")} />
+      <Stack.Screen name="bayar-qris" options={judul("Bayar dengan QRIS")} />
+      <Stack.Screen name="konfirmasi" options={judul("Konfirmasi pembayaran")} />
       <Stack.Screen name="blast" options={judul("Kirim lewat WhatsApp")} />
       <Stack.Screen name="laporan" options={judul("Laporan")} />
       <Stack.Screen name="pengguna" options={judul("Pengguna & peran")} />

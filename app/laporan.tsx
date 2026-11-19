@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Linking, View } from "react-native";
 import { useQ } from "../src/session";
 import { api } from "../convex/_generated/api";
-import { Screen, T, Card, Btn, Chip, Tunggu, Kosong, C, jalankan } from "../src/ui";
+import { Screen, T, Card, Btn, Chip, Tunggu, Kosong, SearchBar, C, jalankan } from "../src/ui";
 import { rp, bulanIni, geserBulan, namaBulan, tglIndo, isiTemplate, linkWa, TPL_TAGIHAN } from "../src/util";
-import { cetakLaporan } from "../src/cetak";
+import { cetakLaporan, cetakTunggakan } from "../src/cetak";
 
 export default function Laporan() {
   const [tab, setTab] = useState<"bulanan" | "tunggakan">("bulanan");
   const [bulan, setBulan] = useState(bulanIni());
+  const [cari, setCari] = useState("");
   const d = useQ(api.laporan.bulanan, { bulan });
   const tg = useQ(api.laporan.tunggakan);
   const pg = useQ(api.pengaturan.ambil);
@@ -45,13 +46,21 @@ export default function Laporan() {
           <Btn label="Bagikan laporan (PDF)" onPress={() => jalankan(() => cetakLaporan(bulan, d, pg))} />
         </>)}
       </>)}
-      {tab === "tunggakan" && (!tg ? <Tunggu /> : tg.length === 0 ? <Kosong teks="Tidak ada tunggakan sampai bulan ini." /> : tg.map((t: any) => (
-        <Card key={t.warga._id}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}><T b>{t.warga.nama} ({t.warga.noRumah})</T><T b c={C.danger}>{rp(t.total)}</T></View>
-          <T size={13} c={C.muted}>{t.rincian}</T>
-          <Btn kind="ghost" label="Ingatkan lewat WA" onPress={() => ingatkan(t)} s={{ marginTop: 6 }} />
-        </Card>
-      )))}
+      {tab === "tunggakan" && (!tg ? <Tunggu /> : tg.length === 0 ? <Kosong ikon="checkmark-circle-outline" teks="Tidak ada tunggakan sampai bulan ini." /> : (() => {
+        const q = cari.trim().toLowerCase();
+        const hasil = tg.filter((t: any) => !q || (t.warga.nama + " " + t.warga.noRumah).toLowerCase().includes(q));
+        return (<>
+          <SearchBar value={cari} onChangeText={setCari} placeholder="Cari nama atau nomor rumah" />
+          <Btn icon="print-outline" kind="soft" label="Cetak daftar tunggakan" onPress={() => jalankan(() => cetakTunggakan(hasil, pg ?? {}))} />
+          {hasil.length === 0 ? <Kosong teks="Tidak ada yang cocok." /> : hasil.map((t: any) => (
+            <Card key={t.warga._id}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}><T b>{t.warga.nama} ({t.warga.noRumah})</T><T b c={C.danger}>{rp(t.total)}</T></View>
+              <T size={13} c={C.muted}>{t.rincian}</T>
+              <Btn kind="ghost" icon="logo-whatsapp" label="Ingatkan lewat WA" onPress={() => ingatkan(t)} s={{ marginTop: 6 }} small />
+            </Card>
+          ))}
+        </>);
+      })())}
     </Screen>
   );
 }

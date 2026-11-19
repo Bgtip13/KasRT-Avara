@@ -1,7 +1,7 @@
 import { mutation, query, internalMutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc } from "./_generated/dataModel";
-import { getUser, wajibStaf, wajibRole, catat, gagal, hariIni, bulanIni, buatTagihanBulan, hitungTunggakan } from "./lib";
+import { getUser, wajibStaf, wajibRole, catat, gagal, hariIni, bulanIni, buatTagihanBulan, hitungTunggakan, lengkapiUndangan } from "./lib";
 
 const isi = { judul: v.string(), tanggal: v.string(), jam: v.optional(v.string()), tempat: v.string(), deskripsi: v.optional(v.string()) };
 
@@ -52,10 +52,33 @@ export const detail = query({
     const ambil = async (jenis: "undangan" | "tagihan") => {
       const rows = await ctx.db.query("antrean").withIndex("by_event", (q) => q.eq("eventId", a.eventId).eq("jenis", jenis)).collect();
       const out = [];
-      for (const r of rows) { const w = await ctx.db.get(r.wargaId); if (w) out.push({ ...r, warga: w }); }
+      for (const r of rows) { const w = await ctx.db.get(r.wargaId); if (w && (jenis === "tagihan" || w.aktif)) out.push({ ...r, warga: w }); }
       return out.sort((x, y) => x.warga.noRumah.localeCompare(y.warga.noRumah, "id", { numeric: true }));
     };
     return { event, undangan: await ambil("undangan"), tagihan: await ambil("tagihan") };
+  },
+});
+
+// Melengkapi antrean undangan untuk warga yang ditambah/diaktifkan setelah acara dibuat (perbaikan "data warga tidak ditemukan")
+export const sinkronUndangan = mutation({
+  args: { token: v.string(), eventId: v.id("event") },
+  handler: async (ctx, a) => {
+    await wajibRole(ctx, a.token, ["admin"]);
+    if (!(await ctx.db.get(a.eventId))) return 0;
+    return await lengkapiUndangan(ctx, a.eventId);
+  },
+});
+
+export const hapus = mutation({
+  args: { token: v.string(), id: v.id("event") },
+  handler: async (ctx, a) => {
+    const me = await wajibRole(ctx, a.token, ["admin"]);
+    const ev = await ctx.db.get(a.id);
+    if (!ev) throw gagal("Acara tidak ditemukan");
+    for (const jenis of ["undangan", "tagihan"] as const)
+      for (const x of await ctx.db.query("antrean").withIndex("by_event", (q) => q.eq("eventId", a.id).eq("jenis", jenis)).collect()) await ctx.db.delete(x._id);
+    await ctx.db.delete(a.id);
+    await catat(ctx, me, "Hapus acara", `${ev.judul} (${ev.tanggal})`);
   },
 });
 
