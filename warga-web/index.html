@@ -62,9 +62,10 @@ async function load() {
   draw();
 }
 async function masuk() {
-  S.busy = true; S.msg = ""; draw();
+  const hp = val("hp"), pin = val("pin"); // baca isian SEBELUM draw(), karena draw() membangun ulang form
+  S.hp = hp; S.busy = true; S.msg = ""; draw();
   try {
-    const r = await call("mutation", "auth:loginPin", { phone: val("hp"), pin: val("pin") });
+    const r = await call("mutation", "auth:loginPin", { phone: hp, pin });
     if (!r.ok) S.msg = r.pesan;
     else if (r.role !== "warga") S.msg = "Halaman ini khusus warga. Petugas dan pengurus silakan memakai aplikasi.";
     else { S.token = r.token; S.ganti = !!r.wajibGanti; try { localStorage.setItem("kasrt_t", r.token); } catch (e) {} if (!S.ganti) await load(); }
@@ -72,8 +73,9 @@ async function masuk() {
   S.busy = false; draw();
 }
 async function gantiPin() {
+  const pb = val("pb");
   S.busy = true; S.msg = ""; draw();
-  try { await m("auth:gantiPinAwal", { pinBaru: val("pb") }); S.ganti = false; await load(); } catch (e) { S.msg = e.message; }
+  try { await m("auth:gantiPinAwal", { pinBaru: pb }); S.ganti = false; await load(); } catch (e) { S.msg = e.message; }
   S.busy = false; draw();
 }
 function kecil(f) { // perkecil foto bukti agar unggahan ringan di HP lemot
@@ -108,7 +110,7 @@ function pilihKas(id) {
 const msgBox = () => S.msg ? `<div class="msg">${esc(S.msg)}</div>` : "";
 function vLogin() {
   return `<h1>KasRT Warga</h1><div class="m">Masuk dengan nomor WhatsApp dan PIN Anda.</div>${msgBox()}
-  <div class="c"><label class="m">Nomor WhatsApp</label><input id="hp" type="tel" inputmode="tel" autocomplete="username" placeholder="08xxxxxxxxxx">
+  <div class="c"><label class="m">Nomor WhatsApp</label><input id="hp" type="tel" inputmode="tel" autocomplete="username" placeholder="08xxxxxxxxxx" value="${esc(S.hp)}">
   <label class="m">PIN (6 angka)</label><input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
   <button ${S.busy ? "disabled" : ""} onclick="masuk()">${S.busy ? "Memeriksa…" : "Masuk"}</button></div>`;
 }
